@@ -115,6 +115,18 @@ AUDIT_TEMPLATES=(
   seo-audit.md
 )
 
+# Rules an audit skill links to. Without these the extracted pack ships a
+# dangling link — /docs-audit step 1 audits against readme-quality.md and
+# references it by relative path from the SKILL.md.
+AUDIT_RULES=(
+  readme-quality.md
+)
+
+# Non-audits templates an audit skill references (paths relative to templates/).
+AUDIT_ROOT_TEMPLATES=(
+  project-readme.md
+)
+
 # ----- safety-hooks inventory ------------------------------------------------
 SAFETY_HOOKS=(
   check-secrets.sh
@@ -161,6 +173,14 @@ done
 
 for tmpl in "${AUDIT_TEMPLATES[@]}"; do
   copy_file "templates/audits/$tmpl" "$AUDIT_DIR/templates/audits/$tmpl"
+done
+
+for rule in "${AUDIT_RULES[@]}"; do
+  copy_file ".claude/rules/$rule" "$AUDIT_DIR/.claude/rules/$rule"
+done
+
+for tmpl in "${AUDIT_ROOT_TEMPLATES[@]}"; do
+  copy_file "templates/$tmpl" "$AUDIT_DIR/templates/$tmpl"
 done
 
 # README + manifest live in the sub-pack source dir; they're not extracted from upstream

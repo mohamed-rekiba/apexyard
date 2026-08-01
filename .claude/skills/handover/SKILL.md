@@ -539,7 +539,9 @@ Mapping table:
 | Stale CI (no runs in > 30 days) | `4. Re-enable CI on this repo — copy in golden-paths/pipelines/ci.yml` |
 | Test coverage unknown | `5. Set up test coverage reporting (vitest/jest coverage config) before the first feature` |
 | ≥ 10 open issues | `6. Triage the issue backlog with the previous owner before taking ownership` |
-| Missing README or onboarding doc | `7. Write a minimum-viable README (what the project does, how to run it locally, where it deploys)` |
+| Missing README or onboarding doc | `7. Write the README against templates/project-readme.md — what the project does, how to run it, how it's built` |
+
+For that last row, the shape to author against is `templates/project-readme.md` (adopter override: `<private_repo>/custom-templates/project-readme.md`), and the standard it must meet is [`.claude/rules/readme-quality.md`](../../rules/readme-quality.md). Carry that reference into the ticket body when the item is filed in step 7.5 — "write a README" with no shape attached is how a stack list and an untested install command end up passing for done.
 
 If no risks match a row, omit that row. If fewer than 3 actions come out, add:
 
@@ -1110,7 +1112,7 @@ Found 5 follow-up tasks in the assessment (2 were filed in a prior run — skipp
   2. Fix the 7 failing tests in src/api/orders before merging new PRs
   3. Set up test coverage reporting (vitest coverage config) before the first feature
   4. Triage the issue backlog with the previous owner before taking ownership
-  5. Write a minimum-viable README (what the project does, how to run it locally, where it deploys)
+  5. Write the README against templates/project-readme.md — what the project does, how to run it, how it's built
 
 Per-item y/n (or 'all', 'none', a comma-list like '1,3,5'):
 ```

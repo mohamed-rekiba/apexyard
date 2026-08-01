@@ -23,17 +23,54 @@ Deep-dive documentation analysis using the Diataxis framework. Checks that docs 
 
 ### Step 1: README quality
 
-Check `README.md` for these sections (each is pass/fail):
+Audit `README.md` against [`.claude/rules/readme-quality.md`](../../rules/readme-quality.md) — the framework's README authoring standard — and the shape it authors against, `templates/project-readme.md`.
 
-| Section | Present? | Quality check |
-|---------|----------|--------------|
-| Project description | | One paragraph explaining what this is and who it's for |
-| Prerequisites | | Language version, tools needed, accounts required |
-| Quick start | | Copy-pasteable commands to get running locally in < 5 minutes |
-| Development setup | | How to set up the dev environment, run tests, lint |
-| Deployment | | How to deploy to staging and production |
-| Contributing | | How to contribute (branch naming, PR process, code standards) |
-| License | | License type and link |
+**Judge content, not headings.** A section that exists but says nothing useful is a finding, not a pass. The most common real-world README failure is a tidy structure wrapped around a stack list and an untested install command.
+
+#### 1a. The four reader questions
+
+A README answers four questions. Score each on whether a reader gets a real answer:
+
+| # | Question | Sections | What a pass looks like |
+|---|----------|----------|------------------------|
+| 1 | **What is this?** | Description, problem, demo | First sentence names the *user and problem*, not the stack. Reader can see it working without installing. |
+| 2 | **Does it work?** | Evaluation, testing, monitoring | Quality claims backed by a dataset and numbers; test command present; absences stated. |
+| 3 | **Can I run it?** | Quickstart, configuration, deployment | Prerequisites → clone → install → configure → run. Required vs optional config distinguished. |
+| 4 | **How was it built?** | Architecture, structure, decisions, CI/CD | Diagram *with* an explanatory line; consequential decisions carry their trade-offs. |
+
+Plus the tail: **limitations** and **future work**.
+
+**Scale expectations to the project.** A CLI utility legitimately has no evaluation or monitoring section — that is proportionality, not a gap. A retrieval or ML service without evaluation is a real FAIL. Never report a missing section as a finding without first asking whether it applies.
+
+#### 1b. Anti-patterns (each one found is a finding)
+
+| Check | Severity | How to detect |
+|-------|----------|---------------|
+| Description opens with the tech stack instead of user + problem | medium | Read the first two sentences |
+| No demo — live link, video, GIF, screenshot, or worked I/O example | medium | Grep for image/video assets and links near the top |
+| Quality-sensitive project with no evaluation | **high** | Does the repo do retrieval / ranking / ML / AI / parsing? Then look for a dataset + metrics |
+| Setup commands that don't match the repo's real tooling | **high** | Cross-check every command against `package.json` scripts, `Makefile`, `pyproject.toml`, CI workflow |
+| Env vars in `.env.example` / code but undocumented (or documented but unread) | **high** | Diff documented vars against what the code actually reads |
+| Work exists in the repo but isn't linked from the README (evaluation, experiments, notebooks, results) | medium | Look for substantial dirs absent from the README |
+| Broken links, dead demo URLs, missing image paths | medium | Resolve every link and asset path |
+| Present-tense description of an unimplemented feature | **high** | Cross-check claimed capabilities against the code — this is the worst failure, it actively misleads |
+| Missing tests / CI / monitoring silently omitted rather than stated | medium | Absent section + absent capability = omission, not proportionality |
+| Wall of text — no sections, tables, commands, or visuals | low | Structural read |
+| `tree` dump instead of an annotated, simplified structure | low | Look for unannotated full-depth output |
+| Undescriptive notebook names (`notebook1.ipynb`, `final_v2.ipynb`) | low | List notebook filenames |
+
+#### 1c. The two honesty rails
+
+These are the failures that make a README *wrong* rather than thin. Report them as **high** severity regardless of how complete the rest of the document is:
+
+1. **Unshipped features described in present tense.** Verify claimed capabilities against the code.
+2. **Absences omitted rather than stated.** No tests, no CI, no monitoring — the README must say so. A deleted section reads as "not applicable" and converts a known gap into an implied capability.
+
+#### 1d. Say so when the score re-baselines
+
+This step judges content, not section presence — a stricter bar than the presence-only checklist it replaced. On the **first** run under it, a project whose README previously scored a single WARN can drop sharply with no documentation change at all. `audit_render_trend` will render that as a step down.
+
+It isn't a regression, and reporting it as one wastes the operator's attention. When the previous run for this project predates the new bar, note the re-baseline in the output alongside the trend line.
 
 ### Step 2: API documentation (if applicable)
 
@@ -70,7 +107,7 @@ Diataxis coverage:
 
 | # | Area | Status | Finding |
 |----|------|--------|---------|
-| D1 | README | WARN | Missing "Contributing" section |
+| D1 | README | FAIL | Opens with the stack, not the problem; `npm run dev` isn't in package.json; "real-time sync" described in present tense but unimplemented |
 | D2 | API docs | PASS | OpenAPI spec matches code (28/28 endpoints) |
 | D3 | Env vars | FAIL | 12 env vars in .env.example, 0 documented in README |
 | D4 | Changelog | PASS | CHANGELOG.md updated with last 5 releases |
@@ -99,6 +136,7 @@ payload=$(mktemp); cat > "$payload" <<'EOF'
 {
   "schema_version": 1,
   "findings": [
+    {"id": "D1", "severity": "high",   "status": "open", "summary": "README: unimplemented feature in present tense; npm run dev not in package.json"},
     {"id": "D2", "severity": "high",   "status": "open", "summary": "No docs/how-to/ dir; recipes scattered in Slack"},
     {"id": "D3", "severity": "high",   "status": "open", "summary": "Env vars not documented in README (12 in .env.example)"},
     {"id": "D5", "severity": "medium", "status": "open", "summary": "README references Express; code migrated to Fastify 3 months ago"}
@@ -126,12 +164,14 @@ touch projects/<name>/audits/docs-audit/.audit-history-tracked
 
 ## Rules
 
-1. **README is the minimum.** Every project needs a README with at least: description, quick start, and how to deploy. Everything else is a "should have."
+1. **README is the minimum.** Every project needs one, and it must answer the four reader questions in proportion to the project's scope — not merely carry the headings. Step 1 is the bar; this rule is why it can't be skipped.
 2. **Check for staleness, not just existence.** A README that exists but describes the wrong stack is worse than no README.
-3. **Diataxis is a lens, not a checklist.** Don't fail a project for missing all four quadrants — most projects start with tutorials + reference and add the rest over time.
-4. **Auto-PASS for the ops repo itself.** ApexYard's own docs are governed by its own process — this skill is for managed projects.
-5. **Always persist via the lib.** The persist step runs regardless of opt-in commit state.
-6. **Severity vocabulary in the JSON is lowercase.** The lib expects `critical`/`high`/`medium`/`low`/`info`.
+3. **Judge content, not headings.** Step 1 audits against [`.claude/rules/readme-quality.md`](../../rules/readme-quality.md). A section that exists but says nothing is a finding. Verify commands against the repo's real tooling and claimed features against the code — a plausible-sounding README is exactly what a fluent author produces.
+4. **Scale to the project before reporting a gap.** A CLI tool has no evaluation section by design; a retrieval service without one is a high finding. Ask whether a section applies before reporting it missing — but treat a *silently omitted* absence (no tests, no CI) as a finding, since omission reads as capability.
+5. **Diataxis is a lens, not a checklist.** Don't fail a project for missing all four quadrants — most projects start with tutorials + reference and add the rest over time.
+6. **Auto-PASS for the ops repo itself.** ApexYard's own docs are governed by its own process — this skill is for managed projects.
+7. **Always persist via the lib.** The persist step runs regardless of opt-in commit state.
+8. **Severity vocabulary in the JSON is lowercase.** The lib expects `critical`/`high`/`medium`/`low`/`info`.
 
 ---
 
