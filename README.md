@@ -71,7 +71,10 @@ They run on every PR, alongside a PR-title check, plus CodeQL, shellcheck, and m
 Two gaps are worth stating plainly rather than leaving you to discover them:
 
 - **Secret and SAST scanning is release-gated**, not per-commit. gitleaks and Semgrep run on tags and published releases, so a secret introduced mid-branch isn't caught until the release cut.
-- **The two harness adapters have unaudited npm dependencies.** `harness-adapters/opencode` and `harness-adapters/pi` each carry a third-party package and a committed lockfile, and the daily conformance job `npm install`s both — with credentials. Dependabot is configured for GitHub Actions only, so nothing watches those packages for advisories. The framework core is genuinely dependency-free bash and markdown; the adapters are not, and that distinction had been blurred in this README and in two source comments.
+- **The two harness adapters have unaudited npm dependencies.** `harness-adapters/opencode` and `harness-adapters/pi` each declare one direct package, but their committed lockfiles resolve to **35 and 143** entries — pi's tree pulls in the AWS Bedrock SDK, `google-auth-library`, `openai`, `undici`, and `ws`. The daily conformance job `npm install`s both, with credentials. Dependabot is configured for GitHub Actions only, so nothing watches any of it for advisories.
+- **The adapters' TypeScript isn't scanned either.** About 3,500 lines live under `harness-adapters/**`, including `gate-dispatcher.ts` — the code that turns a hook's exit code 2 into a blocked tool call. Semgrep runs against shell only, and CodeQL's matrix is pinned to `actions`, so no static analysis reaches it.
+
+The framework core really is dependency-free bash and markdown. The adapters are a different thing, and this README, two workflow comments, and the Dependabot config had all blurred that distinction.
 
 **The harness adapters are verified against real sessions, not by construction.** A daily credentialed [Conformance CI](docs/conformance-ci.md) job drives opencode, pi, and Codex and confirms an ungated action is actually refused by the real bash hook. That's the difference between "we wired it up" and "we watched it block something."
 
