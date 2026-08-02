@@ -41,7 +41,7 @@ This doc is the honest today-vs-not-yet breakdown for running apexyard-governed 
 
 ## The honest summary
 
-A pi user gets both halves of apexyard's governance: the **instructions** (via `AGENTS.md`/`SYSTEM.md`, unchanged since #805) and, as of #815, the same **mechanical gates** Claude Code enforces — an ungated action is refused by the real bash hook running underneath pi, not just discouraged in prose. As of 2026-07-09 that enforcement is **live-proven**: the "does pi's live internal dispatch really call the handler this way" hop that this doc used to list as its one asterisk has now been observed inside a credentialed `pi -p -a` session, not just proven by construction. The only thing between an adopter and enforcement is the `-a` precondition above.
+A pi user gets both halves of apexyard's governance: the **instructions** (via `AGENTS.md`/`SYSTEM.md`) and the same **mechanical gates** Claude Code enforces (#805, #815) — an ungated action is refused by the real bash hook running underneath pi, not just discouraged in prose. That enforcement is **live-proven**, not merely proven by construction: the "does pi's live internal dispatch really call the handler this way" hop has been observed inside a credentialed `pi -p -a` session (verified 2026-07-09). The only thing between an adopter and enforcement is the `-a` precondition above.
 
 ## How to install
 

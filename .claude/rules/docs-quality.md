@@ -65,6 +65,19 @@ These are the rails because they are the two ways a document stops being merely 
 
 2. **State absences; do not omit them.** No tests, no CI, no rollback path, no monitoring — write it plainly under the relevant heading. Deleting a section to tidy up converts a known gap into an implied capability, and a reader cannot tell "not applicable" from "missing" unless you tell them.
 
+### When history earns its place
+
+Rail 1 forbids narrating a document's edit history. It does not forbid *all* reference to the past, and the distinction is the same one [`comment-quality.md`](comment-quality.md) draws for comments: **reference history only when the past is the reason.**
+
+The test is whether a reader who doesn't know the history would make a mistake without it. Two cases pass:
+
+- **A retracted claim.** When a document previously stated something untrue and readers acted on it, saying so is a correction, not a change log. `right-size-ceremony.md` states plainly that earlier versions cited a token-metering hook that does not ship in this repository — a reader who saw that claim needs to know it was withdrawn, and silently deleting it would leave them still believing it.
+- **A semantic change that alters how to read the current behaviour.** When a guard, gate, or warning still exists but now means something different, a reader who remembers the old meaning will misinterpret the new one. Naming the change prevents that misreading.
+
+Both still lead with the present. "This is advisory; it was blocking until the text-matching approach proved unsound" reads correctly. "Since #1026 this is advisory" makes the reader reconstruct the present from the past, which is the failure rail 1 is about.
+
+Everything else — a renamed function, a refactored implementation, a feature that landed in some release — belongs in the commit and the AgDR, not the document.
+
 ## Anti-patterns
 
 | Anti-pattern | Why it fails |
