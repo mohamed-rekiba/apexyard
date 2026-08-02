@@ -30,7 +30,7 @@ Re-running `/setup` on an already-configured fork shows the current config and a
 
 ## Process
 
-> **Tip for the agent driving setup**: `docs/multi-project.md` is the canonical reference for portfolio modes, v1→v2 migration, custom-templates path-mirroring, the FAQ, and trade-offs. As of #372 it is **not** auto-imported into the session context (the 70k-char file was loading ~18k tokens into every session, even for adopters who never re-run setup). The steps below are self-contained for the mechanical setup. If a first-timer asks a question mid-setup that this SKILL doesn't answer directly, `Read docs/multi-project.md` on demand rather than guessing.
+> **Tip for the agent driving setup**: `docs/multi-project.md` is the canonical reference for portfolio modes, v1→v2 migration, custom-templates path-mirroring, the FAQ, and trade-offs. It is **not** auto-imported into the session context (#372) — the 70k-char file loads ~18k tokens into every session otherwise, including for adopters who never re-run setup. The steps below are self-contained for the mechanical setup. If a first-timer asks a question mid-setup that this SKILL doesn't answer directly, `Read docs/multi-project.md` on demand rather than guessing.
 
 ### Step −1: Pre-flight — refuse if `jq` is missing (REQUIRED)
 

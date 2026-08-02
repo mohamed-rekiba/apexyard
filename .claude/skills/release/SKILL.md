@@ -242,7 +242,7 @@ Released-From: $DEV_SHA
 
 **Why the trailer sits after the Glossary, as its own final paragraph:** `git interpret-trailers` (and the `%(trailers:...)` pretty-format used by `bin/release-changelog.sh`) only recognises a trailer block when it is the LAST paragraph of the message — a blank line before it, nothing but `Key: value` lines after it. Putting `Released-From:` anywhere earlier (e.g. inside the Summary or Testing sections) would make it invisible to the reader on the next release cut. Do not add anything below the trailer line.
 
-**PR title format** (`release` is whitelisted in `pr.title_type_whitelist` since #168):
+**PR title format** (`release` is whitelisted in `pr.title_type_whitelist`, #168):
 
 ```
 release(#<release-ticket>): vA.B.C

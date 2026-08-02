@@ -19,13 +19,13 @@ Four templates are not read by one skill at invocation time. They are the shapes
 
 Note `project-readme.md`'s filename — it is deliberately **not** `readme.md`, which on a case-insensitive filesystem (macOS, Windows) would collide with this file.
 
-## `tickets/` subdir — uniform ticket body templates (since #281)
+## `tickets/` subdir — uniform ticket body templates
 
-Every ticket-creating skill (`/feature`, `/bug`, `/task`, `/migration`, `/idea`, `/spike`, `/investigation`) reads its issue-body shape from `templates/tickets/<name>.md`. Adopters override any of them by dropping a file at `<private_repo>/custom-templates/tickets/<name>.md` — same path-mirroring contract as every other template (AgDR-0023, refactored to apply uniformly to all 7 ticket types in AgDR-0031).
+Every ticket-creating skill (`/feature`, `/bug`, `/task`, `/migration`, `/idea`, `/spike`, `/investigation`) reads its issue-body shape from `templates/tickets/<name>.md`. Adopters override any of them by dropping a file at `<private_repo>/custom-templates/tickets/<name>.md` — same path-mirroring contract as every other template (AgDR-0023, applied uniformly to all 7 ticket types in AgDR-0031).
 
-Prior to #281, the 5 older skills (`/feature`, `/bug`, `/task`, `/migration`, `/idea`) constructed their issue body inline via heredoc; only `/spike` and `/investigation` shipped a real template file. That meant a `<private_repo>/custom-templates/feature.md` override silently failed — the framework had no template file at the mirrored path for the override to win over. #281 closes that gap by adding the missing 5 template files and refactoring the 5 skills to resolve via `portfolio_resolve_template tickets/<name>.md`.
+All seven have a real template file, and that uniformity is load-bearing: an override only wins when the framework ships a file at the mirrored path for it to win over. A skill that built its body inline instead would make `custom-templates/feature.md` fail silently — the adopter drops the file, nothing changes, and nothing says why (#281).
 
-**Backward-compat fallback**: if the resolved template file is missing (partial adopter setup), each skill falls back to its inline heredoc body and prints a one-line WARN on stderr. This preserves the pre-#281 behaviour for installations whose `templates/tickets/` dir is missing.
+**Backward-compat fallback**: if the resolved template file is missing (partial adopter setup), each skill falls back to an inline heredoc body and prints a one-line WARN on stderr, so an installation with no `templates/tickets/` dir still files tickets.
 
 ## Adopter overrides — the `custom-templates/` layer
 

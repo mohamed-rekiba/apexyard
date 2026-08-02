@@ -148,9 +148,9 @@ Design approval recorded for PR #<pr> at <sha>. The design-review merge gate wil
 ```
 Designer: "The mockup in Figma looks great, ship it"
 You: *tries to invoke /approve-design 42*  ← WRONG, twice over: a mockup nod is
-                                             not implementation review, AND
-                                             since #1042 the model cannot
-                                             invoke this skill at all.
+                                             not implementation review, AND the
+                                             model cannot invoke this skill at
+                                             all (#1042).
 ```
 
 The designer approved a **mockup**, not the **PR's implementation of that mockup**. The implementation might differ from the mockup. The correct flow:

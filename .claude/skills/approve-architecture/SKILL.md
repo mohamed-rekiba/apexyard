@@ -147,9 +147,9 @@ Architect: "The approach we discussed sounds right, go for it"
 You: *tries to invoke /approve-architecture 42*  ← WRONG, twice over: a verbal
                                                   nod on an approach is not a
                                                   review of the committed design
-                                                  artifact, AND since #1042 the
-                                                  model cannot invoke this skill
-                                                  at all.
+                                                  artifact, AND the model cannot
+                                                  invoke this skill at all
+                                                  (#1042).
 ```
 
 A verbal approval of an *approach* is not a review of the *committed design artifact*. The correct flow:
