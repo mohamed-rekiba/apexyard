@@ -73,33 +73,6 @@ files=$(find . -name '*.md' \
 [ -n "$files" ] || die "found no markdown to scan — the find filters are wrong"
 
 # ---------------------------------------------------------------------------
-# Known-good lines that match the patterns but are not inventory claims
-# ---------------------------------------------------------------------------
-# Every entry needs a reason. A new false positive should land here with one,
-# not be silenced by loosening the patterns — a looser pattern hides real drift.
-skip_line() {
-  case "$1" in
-    # Per-department subtotals in docs/whats-inside.md: "### Engineering (7 roles)".
-    # Correct as written, and they do not sum to the framework total.
-    \#*\([0-9]*\ roles\)*) return 0 ;;
-    # /status prose about invoking sibling skills, not a count of the library.
-    *"instead of running "[0-9]*" skills"*) return 0 ;;
-  esac
-  return 1
-}
-
-# A named subset being enumerated — "12 roles: Heads-of-X, Tech Lead, …" — is a
-# claim about a partition, not about the framework total, so the total is the
-# wrong thing to compare it against. Whether the partition itself sums correctly
-# is a separate question this test cannot answer; see role-triggers.md.
-skip_match() {
-  case "$1" in
-    *"roles:") return 0 ;;
-  esac
-  return 1
-}
-
-# ---------------------------------------------------------------------------
 # Scan
 # ---------------------------------------------------------------------------
 # Nouns are deliberately narrow. Bare "agents" and bare "rules" are excluded
@@ -116,17 +89,34 @@ skip_match() {
 # the input is silently skipped — a counts guard that quietly stops scanning is
 # worse than no guard, because it still reports PASS.
 violations=$(printf '%s\n' "$files" | tr '\n' '\0' | xargs -0 grep -nE \
-  '[0-9]+\+? (shell scripts|hooks|slash commands|skills|modular rule files|rule files|sub-agents|role definitions|role files|roles)([^a-z]|$)' \
+  '[0-9]+\+? (shell scripts|shell hooks|hooks|slash commands|skills|modular rule files|rule files|sub-agents|role definitions|role files|roles)([^a-z]|$)' \
   2>/dev/null | LC_ALL=C awk -F: -v OFS=: \
     -v t_hooks="$n_hooks" -v t_skills="$n_skills" -v t_rules="$n_rules" \
     -v t_agents="$n_agents" -v t_roles="$n_roles" '
 function truth_for(noun) {
-  if (noun == "shell scripts"      || noun == "hooks")          return t_hooks
+  if (noun == "shell scripts"      || noun == "shell hooks" || noun == "hooks") return t_hooks
   if (noun == "slash commands"     || noun == "skills")         return t_skills
   if (noun == "modular rule files" || noun == "rule files")     return t_rules
   if (noun == "sub-agents")                                     return t_agents
   if (noun == "role definitions"   || noun == "role files" || noun == "roles") return t_roles
   return -1
+}
+
+# Known-good matches that are not inventory claims. Every case needs a reason,
+# and every one is scoped to the individual match rather than the whole line —
+# discarding a line would hide any OTHER claim sharing it, which is exactly the
+# drift this test exists to catch.
+function not_an_inventory_claim(noun, before, after, prefix, line) {
+  # An enumerated subset — "13 roles: Heads-of-X, Tech Lead, …" — describes a
+  # partition, so the framework total is the wrong thing to compare it against.
+  # Whether the partition itself sums is a separate question this cannot answer.
+  if (after == ":") return 1
+  # Per-department subtotals in docs/whats-inside.md — "### Engineering (7 roles)".
+  # Correct as written, and they deliberately do not sum to the total.
+  if (noun == "roles" && before == "(" && line ~ /^#/) return 1
+  # /status prose about invoking sibling skills, not a count of the library.
+  if (noun == "skills" && prefix ~ /instead of running $/) return 1
+  return 0
 }
 {
   file = $1; lineno = $2
@@ -135,7 +125,7 @@ function truth_for(noun) {
 
   rest = text
   offset = 0
-  while (match(rest, /[0-9]+\+? (shell scripts|hooks|slash commands|skills|modular rule files|rule files|sub-agents|role definitions|role files|roles)/)) {
+  while (match(rest, /[0-9]+\+? (shell scripts|shell hooks|hooks|slash commands|skills|modular rule files|rule files|sub-agents|role definitions|role files|roles)/)) {
     hit   = substr(rest, RSTART, RLENGTH)
     start = offset + RSTART
 
@@ -143,6 +133,11 @@ function truth_for(noun) {
     # means this is not an inventory claim. In C locale the leading byte of a
     # multibyte dash (en/em) compares >= "\200", which is how "10-20 agents"
     # written with a typographic dash is recognised as a range.
+    #
+    # Known limit of reading one byte: a real claim written with no space after
+    # a typographic dash ("Hooks—42 hooks") reads as a range and is missed. Every
+    # such claim in this tree has a space, and widening this would start
+    # swallowing genuine ranges, which is the costlier direction to be wrong in.
     prev = (start > 1) ? substr(text, start - 1, 1) : ""
 
     open_ended = (hit ~ /\+/)
@@ -152,11 +147,11 @@ function truth_for(noun) {
       n = hit; sub(/[^0-9].*$/, "", n)
       noun = hit; sub(/^[0-9]+\+? /, "", noun)
       want = truth_for(noun)
-      # The character after the noun distinguishes an enumerated subset
-      # ("12 roles: Tech Lead, …") from a bare total; skip_match() reads it.
-      after = substr(text, start + length(hit), 1)
-      if (want >= 0 && n + 0 != want + 0)
-        print file ":" lineno "\t" n " " noun (after == ":" ? ":" : "") "\t(actual: " want ")\t" text
+      after  = substr(text, start + length(hit), 1)
+      prefix = substr(text, 1, start - 1)
+      if (want >= 0 && n + 0 != want + 0 &&
+          !not_an_inventory_claim(noun, prev, after, prefix, text))
+        print file ":" lineno "\t" n " " noun "\t(actual: " want ")\t" text
     }
 
     offset = offset + RSTART + RLENGTH - 1
@@ -164,29 +159,21 @@ function truth_for(noun) {
   }
 }')
 
-# Apply the skip list to whatever survived.
-real_violations=""
-while IFS= read -r v; do
-  [ -n "$v" ] || continue
-  line_text=$(printf '%s' "$v" | cut -f4-)
-  match_text=$(printf '%s' "$v" | cut -f2)
-  skip_line "$line_text" && continue
-  skip_match "$match_text" && continue
-  real_violations="${real_violations}${v}
-"
-done <<EOF
-$violations
-EOF
+real_violations="$violations"
 
 if [ -n "$(printf '%s' "$real_violations" | tr -d '[:space:]')" ]; then
   die "documented counts have drifted from the tree:"
-  printf '%s' "$real_violations" | while IFS= read -r v; do
+  # printf '%s\n', not '%s' — command substitution strips the trailing newline,
+  # and `read` discards a final unterminated line. With one violation that is
+  # every violation, leaving a failure that names nothing.
+  printf '%s\n' "$real_violations" | while IFS= read -r v; do
     [ -n "$v" ] || continue
     printf '        %s\n' "$v" >&2
   done
   echo "" >&2
   echo "        Fix the document, or — if the number is genuinely not an" >&2
-  echo "        inventory claim — add it to skip_line() with a reason." >&2
+  echo "        inventory claim — add a case to not_an_inventory_claim()" >&2
+  echo "        with a reason. Scope it to the match, never the line." >&2
 else
   pass "every documented count matches the tree"
 fi
