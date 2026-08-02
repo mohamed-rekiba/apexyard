@@ -66,6 +66,29 @@ A queue of items with the same columns is exactly what a table is for — forcin
 
 Same facts. The second one you can actually read.
 
+## Long-running work must be followable while it runs
+
+The rule above governs the report at the end. This one governs the silence before it — a separate failure, and the one operators actually complain about.
+
+A session that runs multi-minute work with no output is opaque from outside: the operator cannot tell progress from a hang, cannot see which step is executing, and cannot intervene early when it is going wrong. One measured session spent 95 minutes in blocking review sub-agents and ~34 minutes in full test-suite runs, with a single 18-minute stretch producing no output at all.
+
+Three habits fix it, and all three are yours — no framework support required:
+
+- **Emit a phase marker per step.** One line, before the step, naming what is starting and where you are: `▸ Phase 3/6 — write-detector fix (trust chain)`. The role-activation markers in [`role-triggers.md`](role-triggers.md) are the same idea for a different axis; this one is for multi-step work inside a single role.
+- **Stream long-running output; do not tail-pipe it.** `bin/run-hook-tests.sh` prints `PASS <test>` per test as it goes — piping it through `tail -6` discards exactly the progress that made the run followable, and leaves four minutes of nothing. Show the stream, or show a scoped run. Summarise *after* the fact, in the report.
+- **Prefer background sub-agents for anything slow.** A review spawned with `run_in_background: true` lets you narrate while it works and lets several proceed at once; blocking on each in turn converts N independent reviews into N sequential silences.
+
+Related, because it is the same instinct applied to cost rather than visibility: **scope the work to the change.** Re-running 122 tests to verify a one-line edit, or re-reviewing a whole diff when only three lines moved, is the fixed-overhead pattern [`right-size-ceremony.md`](right-size-ceremony.md) exists to prevent. Filter the suite; brief a re-review with the delta.
+
+### Self-check before starting multi-step work
+
+```
+[ ] Will any single step take more than ~30s with no output?
+[ ] Am I about to pipe a progress-emitting command through tail/head?
+[ ] Am I blocking on a sub-agent that could run in the background?
+[ ] Am I running the full suite when a scoped run answers the question?
+```
+
 ## Backstop
 
 This rule is **self-discipline only** — voice can't be linted from a shell hook (same shape as [`plan-mode.md`](plan-mode.md) and [`parallel-work.md`](parallel-work.md)). Pair it with feedback memory: if the operator says an update read as "robotic" or "too dense," lean into this rule harder next time. Adopters who want the voice turned up across all their Claude Code work can opt into the `human-report` output style (`/output-style human-report`).

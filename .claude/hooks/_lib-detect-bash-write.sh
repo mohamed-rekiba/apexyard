@@ -207,8 +207,46 @@ _bdw_starts_with_git_subcommand() {
 # `<(…)` (process substitution on the read side) was never matched here
 # to begin with (`<` alone isn't a write operator in this file), so no
 # change was needed for that half.
+# QUOTED TEXT IS NOT SHELL SYNTAX (me2resh/apexyard#7).
+#
+# The redirect pattern below scans raw command text, so any `>` reached it —
+# including one inside a quoted string, where it is data rather than an
+# operator. Three false positives were reproduced while measuring this:
+#
+#   echo "a -> b"                    → target "b"        (arrow in prose)
+#   echo '{"tool_input":{...}}'      → target 'b\""}}'   (JSON)
+#   gh issue create --body "...merge…" → blocked a read-only issue filing
+#
+# Each cost a retry cycle, and the class is the one AgDR-0104 says cannot be
+# made sound by pattern-matching alone. Blanking the CONTENTS of quoted spans
+# before the scan removes the data/operator confusion at its source.
+#
+# THE EXCEPTION THAT MAKES THIS SAFE. A shell invoked with -c re-parses its
+# quoted argument, so `bash -c "echo x > file"` really does write, and the
+# redirect really is inside quotes. Blanking there would convert a
+# false-positive fix into a genuine BYPASS of the ticket gate — strictly
+# worse than the noise it removes. `_bdw_match_script_runner` covers go/deno/
+# bun but NOT sh/bash/zsh -c, so nothing else would catch it. Hence the guard:
+# when the command hands a string to a shell (or `eval`), the full text is
+# scanned exactly as before.
+#
+# Interpreter-hidden writes in other languages are unaffected either way —
+# python -c, node -e, ruby -e, perl -e and php -r each have their own
+# dedicated matcher above and do not rely on this one.
+_bdw_blank_quoted_spans() {
+  printf '%s' "$1" | sed "s/'[^']*'/''/g" | sed 's/"[^"]*"/""/g'
+}
+
+_bdw_hands_string_to_shell() {
+  printf '%s' "$1" | grep -qE '(^|[[:space:]]|;|\||&)(env[[:space:]]+)?(sh|bash|zsh|ksh|dash)([[:space:]]+-[^[:space:]]+)*[[:space:]]+-[a-zA-Z]*c([[:space:]]|$)|(^|[[:space:]]|;|\||&)eval([[:space:]]|$)'
+}
+
 _bdw_match_redirection() {
-  echo "$1" | grep -qE '(&>>?|(^|[^|<&])>>?\|?|[0-9]*<>)[[:space:]]*[^[:space:]&|;(][^[:space:]&|;]*'
+  local cmd="$1"
+  if ! _bdw_hands_string_to_shell "$cmd"; then
+    cmd=$(_bdw_blank_quoted_spans "$cmd")
+  fi
+  echo "$cmd" | grep -qE '(&>>?|(^|[^|<&])>>?\|?|[0-9]*<>)[[:space:]]*[^[:space:]&|;(][^[:space:]&|;]*'
 }
 
 # ------------------------------------------------------------------------------
