@@ -68,13 +68,20 @@ else
   pass "gh adapter is add-only (no close/reopen/comment/assign)"
 fi
 
-# 2. glab dispatch.
+# 2. glab dispatch — including the add-only boundary. Asserting add-only on the
+#    gh adapter alone left the glab path unguarded: widening it to `issue close`
+#    passed the whole suite.
 : > "$STUB_DIR/glab.argv"
 FAKE_KIND=glab tracker_label_add "o/r" "42" "qa"
 if grep -q -- "--label qa" "$STUB_DIR/glab.argv" 2>/dev/null; then
   pass "glab adapter applies the label"
 else
   die "glab adapter did not emit --label (got: $(cat "$STUB_DIR/glab.argv" 2>/dev/null))"
+fi
+if grep -qE "issue (close|reopen|note|delete)|--assignee" "$STUB_DIR/glab.argv" 2>/dev/null; then
+  die "glab adapter performed an action beyond adding a label"
+else
+  pass "glab adapter is add-only (no close/reopen/note/assign)"
 fi
 
 # 3. Unknown kind is a silent no-op that still returns success.
@@ -131,7 +138,7 @@ fi
 
 # The branch delete must stay behind the content-diff guard. `git branch -d`
 # alone would refuse after a squash merge; a bare `-D` would be unsafe.
-if grep -q 'git diff "\$DEFAULT_BRANCH" "\$MERGED_BRANCH" --stat' "$SKILL"; then
+if grep -q 'git diff "\$MERGE_SHA" "\$MERGED_BRANCH" --stat' "$SKILL"; then
   pass "branch delete is guarded by an empty content diff"
 else
   die "content-diff guard missing — branch delete is unsafe or will always fail"
@@ -164,12 +171,76 @@ else
   die "ticket.qa_label missing or not defaulted to 'qa' in project-config.defaults.json"
 fi
 
-# The label the skill applies must be the one detect-role-trigger.sh watches,
-# or the QA Engineer will never fire and this whole change is inert.
-if grep -q "add-label qa" "$SRC_ROOT/.claude/hooks/detect-role-trigger.sh" 2>/dev/null; then
-  pass "detect-role-trigger.sh still watches for the qa label"
+# --- the inertness guard --------------------------------------------------
+#
+# These must assert against LIVE CODE, not comments. An earlier version grepped
+# for "add-label qa", which matched a comment in the file header — so gutting
+# the actual `qa|QA)` case branch left the suite fully green while the feature
+# was dead. Strip comment lines before matching.
+TRIGGER="$SRC_ROOT/.claude/hooks/detect-role-trigger.sh"
+TRIGGER_CODE=$(grep -vE '^[[:space:]]*#' "$TRIGGER" 2>/dev/null)
+
+if printf '%s' "$TRIGGER_CODE" | grep -qE '^[[:space:]]*qa\|QA\)'; then
+  pass "detect-role-trigger.sh has a live qa|QA) case branch"
 else
-  die "detect-role-trigger.sh no longer watches 'qa' — the transition would be inert"
+  die "the qa|QA) case branch is gone — the QA Engineer would never fire"
+fi
+
+# The wrapper is invisible to a hook that only matches `gh issue edit` text,
+# because the real CLI call lives inside sourced library code. Without a
+# dedicated branch here (and the paired settings.json matcher) the whole
+# transition is INERT. Same problem tracker_pr_merge solved in #759.
+if printf '%s' "$TRIGGER_CODE" | grep -qE '\btracker_label_add\b'; then
+  pass "detect-role-trigger.sh recognises the tracker_label_add wrapper"
+else
+  die "detect-role-trigger.sh does NOT recognise tracker_label_add — the QA transition is inert (see AgDR-0113)"
+fi
+
+if grep -q 'Bash(tracker_label_add \*)' "$SRC_ROOT/.claude/settings.json" 2>/dev/null; then
+  pass "settings.json carries the Bash(tracker_label_add *) matcher"
+else
+  die "settings.json lacks the tracker_label_add matcher — the hook is never invoked for the wrapper shape"
+fi
+
+# --- correctness guards on the skill's shell ------------------------------
+
+# $TICKETS_FILE was referenced three times and assigned zero times, so the
+# redirect failed and the ticket list was never built.
+if grep -q 'TICKETS_FILE=$(mktemp)' "$SKILL"; then
+  pass "TICKETS_FILE is assigned before use"
+else
+  die "TICKETS_FILE is used without being assigned — the QA labelling never runs"
+fi
+
+# `return` outside a function does not abort an executed script; it warns and
+# CONTINUES. A guard written that way falls through into the mutation it guards.
+if grep -nE '^[[:space:]]*(return|exit) [0-9]' "$SKILL" | grep -qE 'return 0|exit 1'; then
+  die "post-merge steps still use a bare return/exit — guards fall through or abort the flow"
+else
+  pass "post-merge steps use if-blocks, not bare return/exit"
+fi
+
+# Every post-merge step must be gated on the merge having actually succeeded.
+if [ "$(grep -c 'MERGE_RC:-1' "$SKILL")" -ge 3 ]; then
+  pass "steps 8a/10/11 are each gated on MERGE_RC"
+else
+  die "a post-merge step is not gated on MERGE_RC — a blocked merge would still label/clean up"
+fi
+
+# The diff base must be the merge commit (a fixed point), not the default
+# branch (which advances as other PRs land, permanently disabling the guard).
+if grep -q 'git diff "\$MERGE_SHA" "\$MERGED_BRANCH"' "$SKILL"; then
+  pass "branch-delete guard diffs against the merge commit, not a moving branch"
+else
+  die "branch-delete guard diffs against a moving ref — it stops firing once another PR lands"
+fi
+
+# config_get_or substitutes its fallback on ANY empty value, which makes the
+# documented `qa_label: ""` opt-out unexpressible.
+if grep -q "config_get_or '.ticket.qa_label'" "$SKILL"; then
+  die "qa_label read via config_get_or — the documented \"\" opt-out cannot be expressed"
+else
+  pass "qa_label is read raw, so an explicit \"\" opt-out is honoured"
 fi
 
 if [ "$fail" -eq 0 ]; then

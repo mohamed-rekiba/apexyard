@@ -282,31 +282,44 @@ board_move_card "<pr>" "measurement"
 
 What this step does is perform the transition the gate has always described but nothing ever executed: apply the QA label. `detect-role-trigger.sh` already watches for that label and auto-fires the QA Engineer, so applying it is what actually starts QA rather than leaving the ticket in limbo.
 
+**Steps 8a, 10, and 11 all run ONLY on a successful merge.** Guard every one of them on `MERGE_RC` from step 7. If a gate blocked the merge, the PR is still open — labelling its ticket QA would be a lie, and step 11 deleting the approval markers would contradict step 9's promise that "the marker is still valid, no need to re-approve."
+
 ```bash
-# The label is configurable. An adopter who sets it to "" opts out of the
-# transition entirely — respect that, don't substitute a default.
-source "$MARKER_HOME/.claude/hooks/_lib-read-config.sh"
-QA_LABEL=$(config_get_or '.ticket.qa_label' 'qa')
+if [ "${MERGE_RC:-1}" -eq 0 ]; then
 
-if [ -n "$QA_LABEL" ]; then
-  # Resolve the ticket(s) this PR references. Prefer the PR body's Refs/Closes
-  # lines; fall back to the active-ticket marker. Bare `#N` only — a
-  # cross-repo `owner/repo#N` belongs to another tracker and is skipped.
-  gh pr view "<pr>" --repo "<owner/repo>" --json body,title \
-    -q '.title + "\n" + .body' 2>/dev/null \
-    | grep -oiE '\b(refs|closes|fixes|resolves)[[:space:]]+#[0-9]+' \
-    | grep -oE '[0-9]+' | sort -u > "$TICKETS_FILE"
+  # Read the label RAW, not via config_get_or. config_get_or substitutes its
+  # fallback for any empty value, which would make the documented `""` opt-out
+  # unexpressible — an adopter who opted out would get labelled anyway.
+  # config_get returns the literal "null" for an ABSENT key, which is the only
+  # case that should default.
+  source "$MARKER_HOME/.claude/hooks/_lib-read-config.sh"
+  QA_LABEL=$(config_get '.ticket.qa_label')
+  if [ "$QA_LABEL" = "null" ] || ! command -v jq >/dev/null 2>&1; then
+    QA_LABEL="qa"          # key absent, or no jq to read it → framework default
+  fi
 
-  # tracker_label_ensure creates the label when the repo lacks it (a fresh fork
-  # has none of the workflow labels); tracker_label_add then applies it.
-  while IFS= read -r t; do
-    [ -n "$t" ] || continue
-    tracker_label_ensure "<owner/repo>" "$QA_LABEL" "0E8A16" "Merged — awaiting QA verification"
-    tracker_label_add    "<owner/repo>" "$t" "$QA_LABEL" \
-      || echo "WARN: could not apply '$QA_LABEL' to #$t — apply it manually to start QA." >&2
-  done < "$TICKETS_FILE"
+  if [ -n "$QA_LABEL" ]; then
+    # Resolve the ticket(s) this PR references. Bare `#N` only — a cross-repo
+    # `owner/repo#N` belongs to another tracker and is skipped.
+    TICKETS_FILE=$(mktemp)
+    gh pr view "<pr>" --repo "<owner/repo>" --json body,title \
+      -q '.title + "\n" + .body' 2>/dev/null \
+      | grep -oiE '\b(refs|closes|fixes|resolves)[[:space:]]+#[0-9]+' \
+      | grep -oE '[0-9]+' | sort -u > "$TICKETS_FILE"
+
+    # tracker_label_ensure creates the label when the repo lacks it (a fresh
+    # fork has none of the workflow labels); tracker_label_add then applies it.
+    while IFS= read -r t; do
+      [ -n "$t" ] || continue
+      tracker_label_ensure "<owner/repo>" "$QA_LABEL" "0E8A16" "Merged — awaiting QA verification"
+      tracker_label_add    "<owner/repo>" "$t" "$QA_LABEL" \
+        || echo "WARN: could not apply '$QA_LABEL' to #$t — apply it manually to start QA." >&2
+    done < "$TICKETS_FILE"
+  fi
 fi
 ```
+
+`TICKETS_FILE` is consumed again by step 11, so remove it only after that step — not here.
 
 **This step must never fail the merge.** The merge has already happened and is irreversible; a labelling failure is a nuisance, not a reason to report failure. `tracker_label_add` returns non-zero only when an adapter ran and the host rejected it — warn and continue, exactly as `board_move_card` does. Same reasoning for a tracker kind with no adapter: nothing to do is not an error.
 
@@ -349,30 +362,41 @@ If `MERGE_RC` = 3 (`tracker.kind: none`, no host CLI configured):
 
 `--delete-branch` deletes the **remote** branch. It does nothing locally, so without this step every merge leaves the operator checked out on a dead branch with a stale default branch — and the merged files absent from their working tree.
 
+**Use no bare `return` or `exit` anywhere in this step.** Both are wrong here, in opposite directions. `return` outside a function does *not* abort an executed script — it prints an error and **carries on to the next line**, so a guard written as `... || { warn; return 0; }` falls straight through into the very mutation it exists to prevent. And `exit 1` would abort the whole flow, breaking the never-fail-the-merge contract for a merge that already happened. Express every guard as an `if` block that simply *contains* the work.
+
 ```bash
-cd "$MARKER_HOME" || exit 1
-# Never mutate a repo other than the intended one (isolated-builds.md).
-[ "$(git rev-parse --show-toplevel)" = "$MARKER_HOME" ] || { echo "WARN: unexpected repo, skipping local cleanup." >&2; return 0; }
-
-DEFAULT_BRANCH=$(gh repo view "<owner/repo>" --json defaultBranchRef -q .defaultBranchRef.name 2>/dev/null || echo main)
-MERGED_BRANCH="$PR_HEAD_BRANCH"   # from step 6
-
-git checkout "$DEFAULT_BRANCH" --quiet && \
-  git fetch origin --quiet && \
-  git merge --ff-only "origin/$DEFAULT_BRANCH" --quiet
-git remote prune origin >/dev/null 2>&1
-
-# Delete the local branch — but ONLY when its content is already on the default
-# branch. `git branch -d` is the wrong guard here: after a SQUASH merge (this
-# skill's default strategy) the branch's commits are not ancestors of the
-# squashed commit, so -d refuses on essentially every merge this skill performs.
-# An empty content diff is the property we actually care about — nothing would
-# be lost — and it holds for squash, rebase, and plain merges alike.
-if [ -n "$MERGED_BRANCH" ] && git show-ref --verify --quiet "refs/heads/$MERGED_BRANCH"; then
-  if [ -z "$(git diff "$DEFAULT_BRANCH" "$MERGED_BRANCH" --stat)" ]; then
-    git branch -D "$MERGED_BRANCH" >/dev/null 2>&1
+if [ "${MERGE_RC:-1}" -eq 0 ] && cd "$MARKER_HOME" 2>/dev/null; then
+  # Never mutate a repo other than the intended one (isolated-builds.md).
+  # -ef compares inode identity, so a symlinked path (/tmp vs /private/tmp on
+  # macOS) doesn't route a legitimate repo into the "unexpected" branch.
+  if [ ! "$(git rev-parse --show-toplevel 2>/dev/null)" -ef "$MARKER_HOME" ]; then
+    echo "WARN: unexpected repo at $MARKER_HOME — skipping local cleanup." >&2
   else
-    echo "WARN: local '$MERGED_BRANCH' still differs from $DEFAULT_BRANCH — kept it. Inspect before deleting." >&2
+    DEFAULT_BRANCH=$(gh repo view "<owner/repo>" --json defaultBranchRef -q .defaultBranchRef.name 2>/dev/null || echo main)
+    MERGED_BRANCH="$PR_HEAD_BRANCH"   # from step 6
+
+    git checkout "$DEFAULT_BRANCH" --quiet 2>/dev/null && \
+      git fetch origin --quiet 2>/dev/null && \
+      git merge --ff-only "origin/$DEFAULT_BRANCH" --quiet 2>/dev/null
+    git remote prune origin >/dev/null 2>&1
+
+    # Delete the local branch — but ONLY when its content already landed.
+    #
+    # `git branch -d` is the wrong guard: after a SQUASH merge (this skill's
+    # default) the branch's commits are not ancestors of the squashed commit,
+    # so -d refuses on essentially every merge this skill performs.
+    #
+    # Diff against the MERGE COMMIT, not the default branch. The merge commit is
+    # a fixed point; the default branch moves. Once any other PR lands, a diff
+    # against the branch tip reports that PR's changes and the guard would never
+    # fire again — failing safe, but never cleaning up either.
+    if [ -n "$MERGED_BRANCH" ] && git show-ref --verify --quiet "refs/heads/$MERGED_BRANCH"; then
+      if [ -z "$(git diff "$MERGE_SHA" "$MERGED_BRANCH" --stat 2>/dev/null)" ]; then
+        git branch -D "$MERGED_BRANCH" >/dev/null 2>&1
+      else
+        echo "WARN: local '$MERGED_BRANCH' differs from the merge commit — kept it. Inspect before deleting." >&2
+      fi
+    fi
   fi
 fi
 ```
@@ -384,14 +408,30 @@ The `-D` is deliberate and is safe **only** because of the diff guard immediatel
 The approval markers and the active-ticket marker describe work that no longer exists. Leaving them accumulates stale state that `warn-stale-review-markers.sh` will later complain about.
 
 ```bash
-rm -f "$(review_marker_path "<owner/repo>" "<pr>" rex "$MARKER_HOME")" \
-      "$(review_marker_path "<owner/repo>" "<pr>" ceo "$MARKER_HOME")"
+if [ "${MERGE_RC:-1}" -eq 0 ]; then
+  rm -f "$(review_marker_path "<owner/repo>" "<pr>" rex "$MARKER_HOME")" \
+        "$(review_marker_path "<owner/repo>" "<pr>" ceo "$MARKER_HOME")"
 
-# Only clear the active ticket if it is one this PR just moved to QA — an
-# operator may be mid-flow on a different ticket.
-CT="$MARKER_HOME/.claude/session/current-ticket"
-if [ -f "$CT" ] && grep -qE "#($(paste -sd'|' - < "$TICKETS_FILE"))$" "$CT" 2>/dev/null; then
-  rm -f "$CT"
+  # Only clear the active ticket if it is one this PR just moved to QA — the
+  # operator may be mid-flow on a different ticket.
+  #
+  # Compare whole values in a loop rather than building a regex alternation
+  # from the file. An alternation breaks three ways here: an EMPTY tickets file
+  # yields `#()$`, which matches a bare `#` and can clear an unrelated marker;
+  # ticket 4 would match inside ticket 42 without anchoring; and any regex
+  # metacharacter in the file would be interpreted rather than matched.
+  CT="$MARKER_HOME/.claude/session/current-ticket"
+  if [ -f "$CT" ] && [ -s "$TICKETS_FILE" ]; then
+    CT_NUM=$(grep -oE '#[0-9]+$' "$CT" 2>/dev/null | tr -d '#')
+    if [ -n "$CT_NUM" ]; then
+      while IFS= read -r t; do
+        [ -n "$t" ] || continue
+        if [ "$t" = "$CT_NUM" ]; then rm -f "$CT"; break; fi
+      done < "$TICKETS_FILE"
+    fi
+  fi
+
+  rm -f "$TICKETS_FILE"     # created in step 8a, consumed by both steps
 fi
 ```
 
