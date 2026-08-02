@@ -2,6 +2,10 @@
 
 These are sensible defaults for a TypeScript-leaning team. Adjust to fit your stack — the principles transfer.
 
+## Comments
+
+Comments explain **why**, not what. What they should carry, the two rails that keep them from going stale, and the anti-patterns to avoid: [`comment-quality.md`](comment-quality.md).
+
 ## TypeScript
 
 - Strict mode **must** be enabled in all projects
