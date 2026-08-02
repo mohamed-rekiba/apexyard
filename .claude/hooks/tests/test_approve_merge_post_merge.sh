@@ -202,6 +202,37 @@ else
   die "settings.json lacks the tracker_label_add matcher — the hook is never invoked for the wrapper shape"
 fi
 
+# BEHAVIOURAL, not structural. The grep above only proves the string appears.
+# It passed while the extraction was silently broken: the original sed used \b,
+# which BSD sed (macOS) does not support, so the prefix strip no-opped and awk
+# returned the ISSUE NUMBER instead of the label. Structural assertions cannot
+# see that. Drive the hook and check the banner.
+#
+# The banner is once-per-session, so clear the marker before each case or every
+# case after the first reports a false negative.
+_fires() {
+  rm -rf "$SRC_ROOT/.claude/session/role-fired" 2>/dev/null
+  printf '%s' "$1" | bash "$TRIGGER" 2>&1 | grep -c "QA Engineer"
+}
+QUOTED='{"tool_name":"Bash","tool_input":{"command":"tracker_label_add \"o/r\" \"42\" \"qa\""}}'
+BARE='{"tool_name":"Bash","tool_input":{"command":"tracker_label_add o/r 42 qa"}}'
+OTHER='{"tool_name":"Bash","tool_input":{"command":"tracker_label_add o/r 42 blocked"}}'
+CREATE='{"tool_name":"Bash","tool_input":{"command":"gh issue create --label qa"}}'
+
+[ "$(_fires "$QUOTED")" -ge 1 ] \
+  && pass "wrapper (quoted args) fires the QA Engineer banner" \
+  || die "wrapper (quoted args) did NOT fire — label extraction is broken (BSD sed \\b?)"
+[ "$(_fires "$BARE")" -ge 1 ] \
+  && pass "wrapper (bare args) fires the QA Engineer banner" \
+  || die "wrapper (bare args) did NOT fire — label extraction is broken"
+[ "$(_fires "$OTHER")" -eq 0 ] \
+  && pass "wrapper with a non-qa label does not fire" \
+  || die "wrapper fired on a non-qa label — extraction is picking the wrong field"
+[ "$(_fires "$CREATE")" -eq 0 ] \
+  && pass "gh issue create does not fire (transition, not initial state)" \
+  || die "gh issue create fired — the create-vs-transition distinction is lost"
+rm -rf "$SRC_ROOT/.claude/session/role-fired" 2>/dev/null
+
 # --- correctness guards on the skill's shell ------------------------------
 
 # $TICKETS_FILE was referenced three times and assigned zero times, so the

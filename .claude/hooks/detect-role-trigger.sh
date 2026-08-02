@@ -329,22 +329,49 @@ detect_label_triggers() {
   local cmd="$1"
   [ -z "$cmd" ] && return 0
 
-  # Only inspect `gh issue edit` shapes — keep the matcher narrow so
-  # `gh issue create --label qa` (a NEW ticket with the qa label) doesn't
-  # spuriously fire the QA Engineer trigger. (Trigger semantics from the
-  # role-triggers table: "ticket moved to qa label", i.e. transition, not
-  # initial create.)
-  if ! printf '%s' "$cmd" | grep -qE '\bgh[[:space:]]+issue[[:space:]]+edit\b'; then
+  # Two recognised shapes, both deliberately narrow so that
+  # `gh issue create --label qa` (a NEW ticket carrying the qa label) does not
+  # spuriously fire. (Trigger semantics from the role-triggers table: "ticket
+  # moved to qa label" — a transition, not an initial state.)
+  #
+  #   1. `gh issue edit <n> --add-label <label>`        — direct CLI shape
+  #   2. `tracker_label_add <owner/repo> <n> <label>`   — forge-agnostic
+  #      wrapper (_lib-tracker.sh), used by /approve-merge's post-merge QA
+  #      transition.
+  #
+  # Shape 2 needs its own branch for the same reason `tracker_pr_merge` needed
+  # one in the merge gates (#759): this hook matches the RAW Bash command text,
+  # and a wrapper's actual gh/glab invocation lives inside already-sourced
+  # library code that never appears in that text. Without this branch the
+  # wrapper is invisible here and the QA Engineer never fires. See AgDR-0113.
+  # settings.json carries the paired `Bash(tracker_label_add *)` matcher that
+  # makes the harness invoke this hook for the wrapper shape at all.
+  local labels=""
+  if printf '%s' "$cmd" | grep -qE '\bgh[[:space:]]+issue[[:space:]]+edit\b'; then
+    # Extract every `--add-label <value>` argument and split on commas.
+    # macOS-compatible: -oE for grep then sed for splitting.
+    labels=$(printf '%s' "$cmd" \
+      | grep -oE -- '--add-label[[:space:]=]+[^[:space:]]+' \
+      | sed -E 's/^--add-label[[:space:]=]+//; s/,/ /g' \
+      | tr '\n' ' ')
+  elif printf '%s' "$cmd" | grep -qE '\btracker_label_add\b'; then
+    # Positional: tracker_label_add <owner/repo> <issue> <label> — the label is
+    # the third argument. Strip surrounding quotes (octal escapes keep the
+    # shell quoting here readable), then take field 3. Regex + field splitting
+    # only; the command text is never eval'd, same rule as _lib-extract-pr.sh.
+    # NO \b IN THE sed — BSD sed (macOS) does not support it. The strip would
+    # silently no-op, leaving the command name in field 1 and making awk return
+    # the ISSUE NUMBER instead of the label. The \b in the grep guard above is
+    # fine: BSD grep does support it. Word-boundary safety is already provided
+    # by that guard, so plain matching here is sufficient.
+    labels=$(printf '%s' "$cmd" \
+      | sed -E 's/.*tracker_label_add[[:space:]]+//' \
+      | tr -d '\042\047' \
+      | awk '{print $3}' \
+      | sed -E 's/,/ /g')
+  else
     return 0
   fi
-
-  # Extract every `--add-label <value>` argument and split on commas.
-  # macOS-compatible: -oE for grep then sed for splitting.
-  local labels
-  labels=$(printf '%s' "$cmd" \
-    | grep -oE -- '--add-label[[:space:]=]+[^[:space:]]+' \
-    | sed -E 's/^--add-label[[:space:]=]+//; s/,/ /g' \
-    | tr '\n' ' ')
   [ -z "$labels" ] && return 0
 
   for label in $labels; do
