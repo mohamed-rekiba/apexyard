@@ -110,7 +110,12 @@ function not_an_inventory_claim(noun, before, after, prefix, line) {
   # An enumerated subset — "13 roles: Heads-of-X, Tech Lead, …" — describes a
   # partition, so the framework total is the wrong thing to compare it against.
   # Whether the partition itself sums is a separate question this cannot answer.
-  if (after == ":") return 1
+  #
+  # Restricted to "roles" deliberately. role-triggers.md is the only place that
+  # partitions a total this way; every other noun uses a colon to introduce a
+  # list of the whole set, as AGENTS.md:104 does with "23 sub-agents:". Allowing
+  # the exemption for any noun leaves those totals silently unchecked.
+  if (noun == "roles" && after == ":") return 1
   # Per-department subtotals in docs/whats-inside.md — "### Engineering (7 roles)".
   # Correct as written, and they deliberately do not sum to the total.
   if (noun == "roles" && before == "(" && line ~ /^#/) return 1
