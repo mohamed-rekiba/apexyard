@@ -307,16 +307,30 @@ if [ "${MERGE_RC:-1}" -eq 0 ]; then
       | grep -oiE '\b(refs|closes|fixes|resolves)[[:space:]]+#[0-9]+' \
       | grep -oE '[0-9]+' | sort -u > "$TICKETS_FILE"
 
-    # tracker_label_ensure creates the label when the repo lacks it (a fresh
-    # fork has none of the workflow labels); tracker_label_add then applies it.
-    while IFS= read -r t; do
-      [ -n "$t" ] || continue
-      tracker_label_ensure "<owner/repo>" "$QA_LABEL" "0E8A16" "Merged — awaiting QA verification"
-      tracker_label_add    "<owner/repo>" "$t" "$QA_LABEL" \
-        || echo "WARN: could not apply '$QA_LABEL' to #$t — apply it manually to start QA." >&2
-    done < "$TICKETS_FILE"
+    # Print what was resolved; you issue the label calls in the next block.
+    echo "QA_LABEL=$QA_LABEL"; echo "TICKETS:"; cat "$TICKETS_FILE"
   fi
 fi
+```
+
+Then, **for each ticket printed above, issue ONE call as a bare top-level statement with LITERAL values** — the repo, the ticket number, and the resolved label all written out, not passed as shell variables:
+
+```bash
+tracker_label_ensure "owner/repo" "qa" "0E8A16" "Merged — awaiting QA verification"
+tracker_label_add "owner/repo" "42" "qa"
+```
+
+**Why literals, and why top-level — this is not style.** `detect-role-trigger.sh` reads the **raw Bash command text** and, like every hook in this framework, never `eval`s it (see `_lib-extract-pr.sh`). So:
+
+- `tracker_label_add "<repo>" "$t" "$QA_LABEL"` gives the hook the seven characters `$QA_LABEL` as the label name. It matches nothing, the QA Engineer never fires, and the transition is silently inert — you have applied the label and started nothing.
+- Nesting the call inside `if`/`while` hides it from the harness matcher for the same reason step 7 documents at length for `tracker_pr_merge`: the matcher fires on the command text a Bash call actually submits.
+
+This is the identical failure mode as passing `"$PR_HOST_REPO"` to `tracker_pr_merge` — the gate reads the literal variable name and blocks. Resolve first, substitute the values, then call.
+
+If `tracker_label_add` returns non-zero, warn and continue — never fail the merge:
+
+```
+WARN: could not apply 'qa' to #42 — apply it manually to start QA.
 ```
 
 `TICKETS_FILE` is consumed again by step 11, so remove it only after that step — not here.
@@ -391,10 +405,28 @@ if [ "${MERGE_RC:-1}" -eq 0 ] && cd "$MARKER_HOME" 2>/dev/null; then
     # against the branch tip reports that PR's changes and the guard would never
     # fire again — failing safe, but never cleaning up either.
     if [ -n "$MERGED_BRANCH" ] && git show-ref --verify --quiet "refs/heads/$MERGED_BRANCH"; then
-      if [ -z "$(git diff "$MERGE_SHA" "$MERGED_BRANCH" --stat 2>/dev/null)" ]; then
-        git branch -D "$MERGED_BRANCH" >/dev/null 2>&1
+      # Test the EXIT CODE, never the emptiness of stdout.
+      #
+      # `git diff <unresolvable-sha> <branch> --stat` exits 128 and prints
+      # NOTHING. An `[ -z "$(...)" ]` guard reads that as "no differences" and
+      # deletes the branch — destroying unmerged work. The window is real: if
+      # `git checkout` succeeds but `git fetch` fails above, $MERGE_SHA is
+      # remote-only and unresolvable locally.
+      #
+      # `git diff --quiet` is unambiguous: 0 = identical, 1 = differs,
+      # >1 = error. Only 0 may delete.
+      if ! git cat-file -e "${MERGE_SHA}^{commit}" 2>/dev/null; then
+        echo "WARN: merge commit $MERGE_SHA not present locally — keeping '$MERGED_BRANCH'." >&2
       else
-        echo "WARN: local '$MERGED_BRANCH' differs from the merge commit — kept it. Inspect before deleting." >&2
+        git diff --quiet "$MERGE_SHA" "$MERGED_BRANCH" 2>/dev/null
+        DIFF_RC=$?
+        if [ "$DIFF_RC" -eq 0 ]; then
+          git branch -D "$MERGED_BRANCH" >/dev/null 2>&1
+        elif [ "$DIFF_RC" -eq 1 ]; then
+          echo "WARN: local '$MERGED_BRANCH' differs from the merge commit — kept it. Inspect before deleting." >&2
+        else
+          echo "WARN: could not compare '$MERGED_BRANCH' with $MERGE_SHA (git exited $DIFF_RC) — kept it." >&2
+        fi
       fi
     fi
   fi

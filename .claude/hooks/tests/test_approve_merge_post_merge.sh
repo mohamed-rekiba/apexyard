@@ -136,12 +136,13 @@ else
   die "step 8a no longer calls tracker_label_add (hardcoded CLI?)"
 fi
 
-# The branch delete must stay behind the content-diff guard. `git branch -d`
+# The branch delete must stay behind a content comparison. `git branch -d`
 # alone would refuse after a squash merge; a bare `-D` would be unsafe.
-if grep -q 'git diff "\$MERGE_SHA" "\$MERGED_BRANCH" --stat' "$SKILL"; then
-  pass "branch delete is guarded by an empty content diff"
+# The exact form is asserted further down (exit-code, not stdout-emptiness).
+if grep -q 'git diff --quiet "\$MERGE_SHA" "\$MERGED_BRANCH"' "$SKILL"; then
+  pass "branch delete is guarded by a content comparison"
 else
-  die "content-diff guard missing — branch delete is unsafe or will always fail"
+  die "content comparison missing — branch delete is unsafe or will always fail"
 fi
 if grep -q "Never hoist the \`-D\` out from behind that check" "$SKILL"; then
   pass "the -D guard rationale is recorded"
@@ -233,6 +234,39 @@ CREATE='{"tool_name":"Bash","tool_input":{"command":"gh issue create --label qa"
   || die "gh issue create fired — the create-vs-transition distinction is lost"
 rm -rf "$SRC_ROOT/.claude/session/role-fired" 2>/dev/null
 
+# The negative above is WEAK on its own: widening the guard from
+# `gh issue edit` to `gh issue` leaves it green, because `gh issue create`
+# has no --add-label to extract. Pin the narrowness directly.
+if printf '%s' "$TRIGGER_CODE" | grep -qE "gh\[\[:space:\]\]\+issue\[\[:space:\]\]\+edit"; then
+  pass "the gh guard is pinned to 'issue edit', not any 'gh issue'"
+else
+  die "the gh guard no longer requires 'issue edit' — create-vs-transition rests on the extractor alone"
+fi
+
+# The label the skill tells you to pass must be a LITERAL. A shell variable
+# reaches the hook as the seven characters '$QA_LABEL' and matches nothing.
+if grep -q 'tracker_label_add "\$' "$SKILL" || grep -q 'tracker_label_add    "<owner/repo>" "\$t"' "$SKILL"; then
+  die "step 8a passes shell variables to tracker_label_add — the hook sees the literal var name and the transition is inert"
+else
+  pass "step 8a passes literal values to tracker_label_add"
+fi
+
+# --- data-loss guard on the branch delete -------------------------------
+#
+# `git diff <unresolvable-sha> <branch> --stat` exits 128 with EMPTY stdout,
+# which an emptiness test reads as "no differences" — deleting unmerged work.
+# The guard must test the exit code.
+if grep -q 'git diff --quiet "\$MERGE_SHA" "\$MERGED_BRANCH"' "$SKILL" && grep -q 'DIFF_RC' "$SKILL"; then
+  pass "branch delete tests git's exit code, not stdout emptiness"
+else
+  die "branch delete guard relies on empty stdout — an unresolvable SHA would destroy unmerged work"
+fi
+if grep -q 'git cat-file -e "\${MERGE_SHA}\^{commit}"' "$SKILL"; then
+  pass "merge commit is confirmed present locally before any comparison"
+else
+  die "no local-presence check on MERGE_SHA — the comparison can fail open"
+fi
+
 # --- correctness guards on the skill's shell ------------------------------
 
 # $TICKETS_FILE was referenced three times and assigned zero times, so the
@@ -260,10 +294,15 @@ fi
 
 # The diff base must be the merge commit (a fixed point), not the default
 # branch (which advances as other PRs land, permanently disabling the guard).
-if grep -q 'git diff "\$MERGE_SHA" "\$MERGED_BRANCH"' "$SKILL"; then
+if grep -q 'git diff --quiet "\$MERGE_SHA" "\$MERGED_BRANCH"' "$SKILL"; then
   pass "branch-delete guard diffs against the merge commit, not a moving branch"
 else
   die "branch-delete guard diffs against a moving ref — it stops firing once another PR lands"
+fi
+if grep -qE 'git diff .*"\$DEFAULT_BRANCH" "\$MERGED_BRANCH"' "$SKILL"; then
+  die "branch-delete guard still compares against DEFAULT_BRANCH somewhere — it will stop firing once another PR lands"
+else
+  pass "no comparison against the moving default branch remains"
 fi
 
 # config_get_or substitutes its fallback on ANY empty value, which makes the
