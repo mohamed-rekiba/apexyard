@@ -1,6 +1,6 @@
 # Perform the post-merge QA transition via a trust-chain label helper
 
-> In the context of a merge completing through `/approve-merge`, facing a documented QA transition that nothing ever executed, I decided to add an add-only `tracker_label_add` to the trust chain and teach the role-trigger hook to recognise it, to achieve an actually-firing QA gate, accepting a new function in `.claude/hooks/**`, a second wrapper-shape matcher in `settings.json`, and — at the operator's explicit direction — a **standing trust-chain write grant committed to that same tracked `settings.json`** (see "The permissions grant" below).
+> In the context of a merge completing through `/approve-merge`, facing a documented QA transition that nothing ever executed, I decided to add an add-only `tracker_label_add` to the trust chain and teach the role-trigger hook to recognise it, to achieve an actually-firing QA gate, accepting a new function in `.claude/hooks/**` and a second wrapper-shape matcher in `settings.json`. The trust-chain write permissions needed to implement it are **deliberately kept out of the shipped tree** — see "The permissions grant" below.
 
 ## Context
 
@@ -35,17 +35,21 @@ Two boundaries constrain the trust-chain surface this adds:
 - **`tracker_label_add` is add-only.** It can attach a label and perform no other mutation — no close, reopen, comment, or assign. Its caller runs immediately after an irreversible merge with no further human confirmation, so the blast radius has to stay small. A future need to close a ticket gets its own reviewed function with its own confirmation story, not a parameter widening this one.
 - **The trigger's matcher stays narrow.** It recognises the wrapper's positional form only, and keeps the existing rule that `gh issue create --label qa` (a *new* ticket) does not fire the trigger — the semantic is a transition, not an initial state.
 
-## The permissions grant (recorded separately because it is not mine)
+## The permissions grant — and why it does NOT ship
 
 Implementing Option C required editing `.claude/hooks/detect-role-trigger.sh` and `.claude/settings.json`. The auto-mode classifier blocked both — correctly, since those files *are* the trust chain, and a model silently rewriting the hook that decides whether security gates fire is exactly what that control exists to prevent.
 
-The operator resolved it by adding `Edit`/`Write` allow rules for `.claude/hooks/**` and `.claude/settings.json`. They were offered a gitignored `.claude/settings.local.json` (personal, never committed) and **chose the tracked `.claude/settings.json` after being told it ships to adopters**. That is their call and it stands; it is recorded here because the consequence outlives the decision:
+Unblocking needs `Edit`/`Write` allow rules for those paths. The question was **where they live**, and the answer went through one reversal worth recording.
 
-- The grant is **not a personal setting**. Every adopter of this fork inherits standing permission for the agent to write to the trust chain with no per-edit prompt.
-- It is **self-amplifying**: `Write(.claude/settings.json)` permits rewriting the allow-list itself, and `Write(.claude/hooks/**)` permits *creating* hooks, not only editing existing ones. Together those compose to create-a-hook-and-wire-it.
-- What remains as controls: the per-PR human merge approval, the merge gate's SHA-matched markers, and the Security Auditor pass that trust-chain diffs auto-fire.
+The rules were first committed to the tracked `.claude/settings.json`. Hakim's review graded that **HIGH** and it was moved to a gitignored `.claude/settings.local.json` before merge. Nothing about the grant ships to adopters; `origin/main` carries no `permissions` block, and this PR does not add one.
 
-Adopters who want the prompt back should delete the `permissions` block, or move it to a gitignored `.claude/settings.local.json` to make it personal again.
+Why the tracked location was wrong, stated plainly so nobody re-proposes it:
+
+- **It is not a personal setting there.** Every adopter of the fork would inherit standing permission for the agent to write to the trust chain with no per-edit prompt, having never seen this record.
+- **It is self-amplifying.** `Write(.claude/settings.json)` permits rewriting `permissions.allow` itself, so the grant contains the capability to redefine its own limits. `Write(.claude/hooks/**)` *creates* files, not only edits them — and `settings.json` already wires `SessionStart`, so create-a-script → wire-it → unprompted execution on the next session.
+- **The remaining controls were fewer than they looked.** An earlier draft of this section named three: the per-PR human merge approval, the merge gate's SHA-matched markers, and this security review. Only the first survives the grant. `block-unreviewed-merge.sh` lives *under* `.claude/hooks/**`, so a control the grant makes writable is not independent of it; and a review is periodic, not preventive. What actually holds is that `.claude/skills/**` is outside the globs, so `/approve-merge` stays `disable-model-invocation: true` — one control, not three.
+
+The decisive argument is not the severity but the absence of any upside: the tracked location buys nothing the gitignored one doesn't. Both unblock identically. Only one propagates.
 
 ## Consequences
 
