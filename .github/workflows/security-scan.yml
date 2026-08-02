@@ -9,11 +9,20 @@
 # Surface coverage — honest accounting for a markdown/shell framework:
 #   Secrets     : gitleaks — full tree scan. Real risk: API keys in examples/configs.
 #   SAST        : Semgrep r/bash — shell hook scripts under .claude/hooks/**
-#                 No JS/TS source (site/ moved to me2resh/apexyard-site, #663).
-#                 CodeQL/ESLint would have nothing to scan.
-#   Dep audits  : N/A — no package.json, requirements.txt, or pyproject.toml
-#                 in this repo. Marked explicitly so adopters aren't confused.
-#   SBOM/licence: N/A — no third-party deps. Trivial SBOM = not worth generating.
+#                 TypeScript is NOT scanned, and that is a gap. The repo tracks
+#                 ~3.5k lines of .ts under harness-adapters/** (site/ moved out
+#                 in #663, but the adapters landed after). It includes
+#                 gate-dispatcher.ts, which maps hook exit code 2 to a BLOCK —
+#                 trust-chain code. Semgrep runs r/bash only and codeql.yml
+#                 pins `language: [actions]`, so nothing analyses it.
+#   Dep audits  : NOT RUN, and that is a gap rather than N/A. The framework
+#                 core has no manifest, but harness-adapters/{opencode,pi}
+#                 each ship a package.json + lockfile with a third-party
+#                 dependency, and conformance.yml `npm install`s both inside a
+#                 credentialed job. dependabot.yml watches github-actions only,
+#                 so nothing tracks advisories for those two packages.
+#   SBOM/licence: not generated. Same caveat — the adapters do have third-party
+#                 deps, so "no deps" is true of the core only.
 #
 # Fail threshold: WARNING+ (equivalent to "medium+"). INFO findings are reported
 # in the step summary but do not block.

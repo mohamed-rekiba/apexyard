@@ -6,10 +6,15 @@ name: CodeQL
 #   - actions: the GitHub Actions workflows themselves (workflow injection,
 #     unpinned actions, excessive token scope)
 #
-# javascript-typescript was removed from the matrix in #663 because
-# site/ moved to me2resh/apexyard-site, leaving no JS/TS source in
-# this repo. CodeQL exits 32 with "no files found" when the language
-# matrix includes a language with zero source files.
+# javascript-typescript is absent from the matrix, and that is now a gap
+# rather than a no-op. It was removed in #663 when site/ moved to
+# me2resh/apexyard-site, which did leave zero JS/TS source at the time —
+# CodeQL exits 32 with "no files found" for a language with no files.
+# harness-adapters/** landed afterwards and brought ~3.5k lines of .ts,
+# including gate-dispatcher.ts (hook exit code 2 -> BLOCK), so the
+# original reason no longer holds and nothing analyses that code today.
+# Re-adding the language needs its own PR: it is a security-control
+# change, and it will surface findings that have never been triaged.
 #
 # Results surface in the repo's Security > Code scanning tab. #518.
 

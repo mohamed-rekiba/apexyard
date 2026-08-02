@@ -51,9 +51,36 @@ ApexYard is a set of plain-text primitives Claude Code reads automatically — n
 - **49 shell hooks** that mechanically enforce the SDLC — ticket-first edits, a two-marker merge gate, migration gates, secrets scanning, and more
 - **66 slash-command skills** — from `/setup` and `/handover` to `/decide`, `/code-review`, `/migration`, and `/launch-check`
 - **23 sub-agents** — Rex (code review), Hakim (security), Tariq (design review), plus the department personas
-- **18 rule files**, workflow docs, and document templates (PRD, tech design, ADR, AgDR, C4 diagrams)
+- **22 rule files**, workflow docs, and document templates (PRD, tech design, ADR, AgDR, C4 diagrams)
 
 **Full directory tree and the complete role / hook / skill / agent breakdown → [`docs/whats-inside.md`](docs/whats-inside.md).**
+
+## Does it actually work?
+
+Fair question to ask of anything claiming to gate your merges. Here's what backs it up, and what doesn't.
+
+**The hooks are tested.** 124 tests run against the enforcement layer itself — the merge gate, the ticket-first checks, the secrets scan, the write-detector that decides whether a shell command is trying to edit a file. Run them yourself:
+
+```bash
+bin/run-hook-tests.sh            # everything
+bin/run-hook-tests.sh <filter>   # just the ones you're changing
+```
+
+They run on every PR, alongside a PR-title check, plus CodeQL, shellcheck, and markdown lint — those last three are path- or branch-filtered, so a given PR may not trigger all of them.
+
+Two gaps are worth stating plainly rather than leaving you to discover them:
+
+- **Secret and SAST scanning is release-gated**, not per-commit. gitleaks and Semgrep run on tags and published releases, so a secret introduced mid-branch isn't caught until the release cut.
+- **The two harness adapters have unaudited npm dependencies.** `harness-adapters/opencode` and `harness-adapters/pi` each declare one direct package, but their committed lockfiles resolve to **35 and 143** entries — pi's tree pulls in the AWS Bedrock SDK, `google-auth-library`, `openai`, `undici`, and `ws`. The daily conformance job `npm install`s both, with credentials. Dependabot is configured for GitHub Actions only, so nothing watches any of it for advisories.
+- **The adapters' TypeScript isn't scanned either.** About 3,500 lines live under `harness-adapters/**`, including `gate-dispatcher.ts` — the code that turns a hook's exit code 2 into a blocked tool call. Semgrep runs against shell only, and CodeQL's matrix is pinned to `actions`, so no static analysis reaches it.
+
+The framework core really is dependency-free bash and markdown. The adapters are a different thing, and this README, two workflow comments, and the Dependabot config had all blurred that distinction.
+
+**The harness adapters are verified against real sessions, not by construction.** A daily credentialed [Conformance CI](docs/conformance-ci.md) job drives opencode, pi, and Codex and confirms an ungated action is actually refused by the real bash hook. That's the difference between "we wired it up" and "we watched it block something."
+
+**What is *not* covered, because it can't be.** Roughly half the rules in `.claude/rules/` are self-discipline — plan mode, right-sizing review effort, writing quality, choosing the right sub-agent. No shell hook can see "the agent should have planned this first" in a chat message. Those rules say so plainly in their own text rather than implying a gate exists. The mechanical guarantees are the ones with a hook behind them; everything else is a well-argued convention that a determined agent can ignore.
+
+The GitLab adapter also has thinner test coverage than the GitHub path, which is the default and by far the better-exercised one.
 
 > **Marketing site:** the site that was previously bundled here has moved to its own repo ([me2resh/apexyard-site](https://github.com/me2resh/apexyard-site)) and is deployed independently at [yard.apexscript.com](https://yard.apexscript.com).
 >
@@ -182,6 +209,20 @@ Running your repo under ApexYard? Add a badge to its README. Every adopter repo 
 ```
 
 [![Built with ApexYard](https://img.shields.io/badge/built_with-ApexYard-2F6DF6?style=flat-square)](https://github.com/me2resh/apexyard)
+
+## What it won't do for you
+
+Worth knowing before you fork, so you find out here rather than three weeks in.
+
+**It governs process, not correctness.** The gates make sure a change was reviewed, recorded, and consciously approved. They can't tell you the code is right. Rex catches a lot, but it's a reviewer, not a proof.
+
+**The merge gate assumes two people, and doesn't enforce that assumption.** Its design is that the author and the approver are different — one writes, another says ship it. But nothing mechanically stops an agent from writing its own review marker: `warn-review-marker-write.sh` warns and exits 0, always. What actually holds the line is that `/approve-merge` can only be invoked by a human, and that the marker's SHA is checked against the forge's reported HEAD. So the gate is real, but it's a gate on *approval*, not on *independence*. On a solo fork you're both parties anyway, which makes it a speed bump you're deliberately choosing to keep — a legitimate way to use it, as long as you know that's what you're buying. The QA stop has the same shape and ships with an [opt-out](.claude/rules/workflow-gates.md) for exactly this reason.
+
+**Claude Code is the first-class path.** opencode, pi, and Codex run the same hooks through an adapter, each with a precondition (usually a headless trust flag). Cursor is partial. If your tool isn't on that list, you get the markdown and none of the enforcement.
+
+**There's no service behind it.** No dashboard, no hosted state, no cross-machine sync. Session markers live in your working copy and don't follow you to another laptop. That's the deliberate trade for having no vendor and no bill — but it does mean "who approved this?" is answered by git history, not a UI.
+
+**It adds friction on purpose.** Every ticket, review, and approval costs you something. On a one-line docs fix that cost can exceed the change, which is why [right-sizing](.claude/rules/right-size-ceremony.md) is itself a rule. If you want zero ceremony, this is the wrong tool.
 
 ## Customization
 
