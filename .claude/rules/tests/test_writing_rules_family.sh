@@ -127,12 +127,27 @@ else
   die "git-conventions no longer names the commit as the home of history voice"
 fi
 
+# The trigger index is the section between "### Quality Rules" and the next
+# "###" heading. Scoping the assertion to it matters: several of these rules are
+# ALSO named in CLAUDE.md's TEMPLATES table, so an unscoped grep passes even
+# after the trigger is deleted — which is the only part that can actually go
+# missing now that every rule file loads regardless.
+trigger_index() {
+  awk '/^### Quality Rules$/{f=1;next} f&&/^### /{exit} f' "$CLAUDE_MD"
+}
+
 # --- 5. Wire-up ------------------------------------------------------------
+# Asserts CLAUDE.md names the rule, not that it `@`-imports it. Claude Code
+# loads every .claude/rules/*.md file whether or not CLAUDE.md mentions it —
+# verified by disabling an import and confirming in a fresh session that the
+# rule was still loaded. So an `@` line proves nothing about availability. What
+# still matters is that CLAUDE.md tells the reader WHEN the rule applies, which
+# is what its trigger index does, so that is what these assertions check.
 for r in docs-quality comment-quality; do
-  if grep -q "@.claude/rules/$r.md" "$CLAUDE_MD"; then
-    pass "CLAUDE.md imports $r.md"
+  if trigger_index | grep -q "$r"; then
+    pass "CLAUDE.md's trigger index names $r"
   else
-    die "CLAUDE.md does not import @.claude/rules/$r.md"
+    die "$r is missing from CLAUDE.md's trigger index — nothing says when it applies"
   fi
 done
 

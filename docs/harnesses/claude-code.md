@@ -6,7 +6,7 @@ Claude Code is the harness ApexYard was built for, and the only one where nothin
 
 ## What "full experience" concretely means
 
-- **`CLAUDE.md` auto-load** — the Chief-of-Staff framing, SDLC, workflow gates, and the `@.claude/rules/*.md` imports are loaded into every session without any manual step.
+- **`CLAUDE.md` auto-load** — the Chief-of-Staff framing and the workflow gates load into every session with no manual step. So does every file in `.claude/rules/`, whether or not `CLAUDE.md` names it: dropping a rule file into that directory makes it live. Files elsewhere — `workflows/`, `templates/` — load only when `CLAUDE.md` imports them with `@`, which is why the SDLC and code-review process docs are read on demand instead of carried in every session.
 - **Mechanical gates fire on every tool call** — the `.claude/hooks/*.sh` scripts wire to `PreToolUse` / `PostToolUse` / `SessionStart` via `.claude/settings.json` and block (exit 2) or advise (exit 0) in real time.
 - **Slash-command skills** — each `.claude/skills/<name>/SKILL.md` is a typed `/command` (e.g. `/start-ticket`, `/decide`, `/code-review`, `/approve-merge`).
 - **Sub-agents** — Rex (code review), Hakim (security), Tariq (design review), Naqid (the contrarian), plus the department personas, each spawned via the `Agent` tool with role-scoped tools.

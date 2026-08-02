@@ -8,7 +8,7 @@
 # the artifacts exist and are wired in, so the rule can't silently rot:
 #
 #   1. .claude/rules/isolated-builds.md exists and carries the ApexYard footer.
-#   2. CLAUDE.md imports it via @.claude/rules/isolated-builds.md.
+#   2. CLAUDE.md's trigger index names it, so a reader learns when it applies.
 #   3. CLAUDE.md's rules-count line is updated (14) and names "isolated builds".
 #
 # Test style matches the existing tests/*.sh (e.g. test_reporting_style.sh)
@@ -36,11 +36,23 @@ else
   die "rule file missing the ApexYard footer"
 fi
 
-# 2. CLAUDE.md imports the rule
-if grep -q '@.claude/rules/isolated-builds.md' "$CLAUDE_MD" 2>/dev/null; then
-  pass "CLAUDE.md imports isolated-builds.md"
+# The trigger index is the section between "### Quality Rules" and the next
+# "###" heading. Scoping the assertion to it matters: several of these rules are
+# ALSO named in CLAUDE.md's TEMPLATES table, so an unscoped grep passes even
+# after the trigger is deleted — which is the only part that can actually go
+# missing now that every rule file loads regardless.
+trigger_index() {
+  awk '/^### Quality Rules$/{f=1;next} f&&/^### /{exit} f' "$CLAUDE_MD"
+}
+
+# 2. CLAUDE.md names the rule so a reader knows when it applies.
+# Not an `@` import: every .claude/rules/*.md file loads regardless of whether
+# CLAUDE.md `@`-imported it, so the import proved availability that was never in
+# doubt. The trigger is the part that can actually go missing.
+if trigger_index | grep -q 'isolated-builds'; then
+  pass "CLAUDE.md's trigger index names isolated-builds"
 else
-  die "CLAUDE.md does not import @.claude/rules/isolated-builds.md"
+  die "isolated-builds is missing from CLAUDE.md's trigger index — nothing says when it applies"
 fi
 
 # 3. CLAUDE.md rules-count line is present and at least 14 (>= the count as

@@ -8,7 +8,7 @@
 # the rule can't silently rot:
 #
 #   1. .claude/rules/readme-quality.md exists and carries the ApexYard footer.
-#   2. CLAUDE.md imports it via @.claude/rules/readme-quality.md.
+#   2. CLAUDE.md's trigger index names it, so a reader learns when it applies.
 #   3. CLAUDE.md's rules-count line is updated (>= 20).
 #   4. templates/project-readme.md exists and covers the four reader questions.
 #   5. The template is NOT named readme.md — that would collide with
@@ -55,11 +55,23 @@ else
   die "rule no longer states the stated-absences honesty rail"
 fi
 
-# 2. CLAUDE.md imports the rule
-if grep -q '@.claude/rules/readme-quality.md' "$CLAUDE_MD" 2>/dev/null; then
-  pass "CLAUDE.md imports readme-quality.md"
+# The trigger index is the section between "### Quality Rules" and the next
+# "###" heading. Scoping the assertion to it matters: several of these rules are
+# ALSO named in CLAUDE.md's TEMPLATES table, so an unscoped grep passes even
+# after the trigger is deleted — which is the only part that can actually go
+# missing now that every rule file loads regardless.
+trigger_index() {
+  awk '/^### Quality Rules$/{f=1;next} f&&/^### /{exit} f' "$CLAUDE_MD"
+}
+
+# 2. CLAUDE.md names the rule so a reader knows when it applies.
+# Not an `@` import: every .claude/rules/*.md file loads regardless of whether
+# CLAUDE.md `@`-imported it, so the import proved availability that was never in
+# doubt. The trigger is the part that can actually go missing.
+if trigger_index | grep -q 'readme-quality'; then
+  pass "CLAUDE.md's trigger index names readme-quality"
 else
-  die "CLAUDE.md does not import @.claude/rules/readme-quality.md"
+  die "readme-quality is missing from CLAUDE.md's trigger index — nothing says when it applies"
 fi
 
 # 3. CLAUDE.md rules-count line is present and at least 20. Lower bound, not

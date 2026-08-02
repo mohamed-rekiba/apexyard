@@ -13,7 +13,7 @@
 #
 #   1. .claude/rules/glossary-lookup.md exists and carries the ApexYard
 #      footer.
-#   2. CLAUDE.md imports it via @.claude/rules/glossary-lookup.md.
+#   2. CLAUDE.md's trigger index names it, so a reader learns when it applies.
 #   3. CLAUDE.md's rules-count line reads >= 18 and names "glossary lookup".
 #   4. The rule points at the shared glossary asset it reads from
 #      (docs/onboarding/glossary.md), so it can't drift onto a stale path.
@@ -44,11 +44,23 @@ else
   die "rule file missing the ApexYard footer"
 fi
 
-# 2. CLAUDE.md imports the rule
-if grep -q '@.claude/rules/glossary-lookup.md' "$CLAUDE_MD" 2>/dev/null; then
-  pass "CLAUDE.md imports glossary-lookup.md"
+# 2. CLAUDE.md's trigger index names the rule.
+# The trigger index is the section between "### Quality Rules" and the next
+# "###" heading. Scoped deliberately: an unscoped grep also matches CLAUDE.md's
+# TEMPLATES table, so it would pass even after the trigger is deleted.
+trigger_index() {
+  awk '/^### Quality Rules$/{f=1;next} f&&/^### /{exit} f' "$CLAUDE_MD"
+}
+
+# Asserts the trigger index names the rule, not that CLAUDE.md `@`-imports it.
+# Claude Code loads every .claude/rules/*.md file regardless — verified by
+# disabling an import and confirming in a fresh session that the rule was still
+# loaded — so an `@` line proved availability that was never in question. A
+# trigger saying WHEN the rule applies is what can actually go missing.
+if trigger_index | grep -q 'glossary-lookup'; then
+  pass "CLAUDE.md's trigger index names glossary-lookup"
 else
-  die "CLAUDE.md does not import @.claude/rules/glossary-lookup.md"
+  die "glossary-lookup is missing from CLAUDE.md's trigger index — nothing says when it applies"
 fi
 
 # 3. CLAUDE.md rules-count line is present and at least 18 (>= the count as

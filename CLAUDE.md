@@ -55,7 +55,7 @@ Each role has a **persona name** — a short identifier used in conversation, PR
 
 ### Activation — roles are first-class participants, not reference docs
 
-Roles activate **on specific conditions**. The full trigger table lives in `@.claude/rules/role-triggers.md` (imported below). The short version:
+Roles activate **on specific conditions**. The full trigger table lives in [`.claude/rules/role-triggers.md`](.claude/rules/role-triggers.md), already loaded. The short version:
 
 - **Auto-activation** — certain signals fire a role automatically. Examples: ticket moves to `qa` label → QA Engineer; PR diff touches `**/auth/**` → Security Auditor; production incident → SRE; new PRD drafted → Product Manager.
 - **Prompted activation** — the user can explicitly activate any role: *"act as the QA Engineer for ticket #42"*, *"put on your Tech Lead hat"*, etc.
@@ -69,7 +69,7 @@ When a role activates:
 
 When you activate, hand off, or exit a role, print a single-line marker (e.g. `▸ Activating Salim (QA Engineer) for #42 (trigger: ticket labeled qa)`) so operators can see who's driving the work — full marker convention in [`.claude/rules/role-triggers.md`](.claude/rules/role-triggers.md) § "How to signal activation".
 
-Full trigger table and handoff artefacts: @.claude/rules/role-triggers.md
+Full trigger table and handoff artefacts: [`.claude/rules/role-triggers.md`](.claude/rules/role-triggers.md) — already loaded, like every rule file.
 
 ---
 
@@ -77,11 +77,11 @@ Full trigger table and handoff artefacts: @.claude/rules/role-triggers.md
 
 ### Software Development Lifecycle
 
-Full process: @workflows/sdlc.md
-
 ```
 Planning --> Design --> Build --> Review --> QA --> Deploy --> Monitor
 ```
+
+Each phase has entry criteria, activities, and exit criteria. `Read` [`workflows/sdlc.md`](workflows/sdlc.md) when you cross a phase boundary or need a phase's criteria — it is reference material consulted at transitions, not on every turn. The gates below are the part that applies continuously, so they stay here.
 
 ### Workflow Gates
 
@@ -104,30 +104,36 @@ Work on ONE ticket at a time. Complete fully before starting next. Each PR = one
 
 ### Quality Rules
 
-- **Branch names and PR titles are enforced, not warned** -- as of 2026-04-12 (#20), `validate-branch-name.sh` and `validate-pr-create.sh` block (exit 2) instead of warn on malformed branch names, PR titles, missing glossary, and missing branch ticket IDs. Fix the format — see @.claude/rules/git-conventions.md
 - **No direct pushes to main** -- every change through a PR
 - **Tests required** -- >80% coverage for domain logic
 - **Lint, typecheck, test, build** must pass before pushing
 - **Code review required** before merge
-- **Explicit per-PR CEO approval required for every merge** -- plan-level "go" / "continue" / "ship it" does NOT authorize any `gh pr merge`. Stop before each merge and ask for a per-PR explicit nod. Mechanically enforced by `block-unreviewed-merge.sh` + the `/approve-merge` skill. "CEO" is the default display title for this human approver — override via `.claude/project-config.json` → `review_markers.human_approver_title` (default unchanged, marker filenames/fields untouched). Full rationale and examples: @.claude/rules/pr-workflow.md
-- **Tracker vocabulary is reserved** -- the words `Ticket`, `#N`, and dependency notation (`blocked by #N`, `depends on #N`) refer ONLY to real GitHub issues that exist in a tracker. Never apply them to in-conversation plan items. When decomposing work in chat, use `Step N` / `Item N` / plain bullets. Crossing the boundary from "plan item" to "tracker item" requires an explicit `gh issue create`. Full rule and anti-pattern example: @.claude/rules/ticket-vocabulary.md
-- **Plan mode for multi-step or risky work** -- enter plan mode when the task is ≥4 dependent steps, the path is unclear, or you're about to do something hard-to-reverse (force push, schema migration, batch PR/issue creation). Same self-discipline shape as parallel-work; harness-owned, no hook. Full heuristic: @.claude/rules/plan-mode.md
-- **Loop mode for repetitive, verifiable work** -- proactively offer (or, on opt-in, run) a closed loop when the task is the same build→verify cycle over ≥2 items, has a machine-checkable eval (build/tests/Rex/count), and a clear stop. Pick the primitive (`/loop` single-agent · `/fan-out` parallel · `Workflow` verifying fleet) and state the guardrails: the loop **halts at the per-PR CEO merge gate (never self-approves)**, its **verify stage runs build + tests + Rex (not just build)**, and it has a budget/iteration ceiling. Self-discipline shape like parallel-work; merge-gate hooks are the backstop. Full heuristic: @.claude/rules/loop-mode.md (rationale: AgDR-0068)
-- **Right-size ceremony — match the gates to the change** -- don't run the full review chain (review sub-agents + role handoffs) on a change that doesn't need it. Classify by path class + blast radius + behavior surface into **Lean** (docs / config-text, small, reversible → inline check + one approval, no review sub-agent), **Standard** (ordinary code → Rex + human nod), or **Heavy** (trust-chain, auth/crypto/secrets, migrations, design artifacts, releases → the full chain, unchanged). Two non-negotiable rails: security / trust-chain / migration **never** goes Lean, and ambiguity **rounds up** a tier. Adds the missing *Lean floor* without relaxing any hard gate. Watching process cost vs change size is **your judgment** — the OSS framework ships no token meter (`enforce-budget.sh` is a premium component, me2resh/apexyard#1044). Self-discipline shape like plan-mode; no hook (the `Agent`-spawn boundary is unhooked, AgDR-0056). Full heuristic: @.claude/rules/right-size-ceremony.md (rationale: AgDR-0107)
-- **Report like a colleague, not a robot** -- when you narrate status back to the operator in-thread, lead with the outcome in plain language, say why it matters, and match the format to the content (a table when it's genuinely tabular, bullets for a list, headings to section a multi-part reply, short prose for a single point) — the enemy is anything they have to *parse*, a wall of prose as much as a reflexive grid. Drop low-signal noise (marker SHAs, hook names, full CI lists when everything's green). Human ≠ vague — blockers, risks, and decisions-needed still surface clearly. The conversational-update sibling of the narrative-PR-summary rule. Self-discipline shape like plan-mode; no hook. Full rule and before/after: @.claude/rules/reporting-style.md
-- **Write READMEs for the reader, not the repo** -- a README answers four questions in order (**what is this** · **does it work** · **can I run it** · **how was it built**), and the shape to author against is `templates/project-readme.md`. Open with the user and the problem, never the stack; show it working without installation; back quality claims with real numbers; run the quickstart on a clean checkout before writing it down; explain the consequential decisions with their trade-offs. Two non-negotiable honesty rails: **present tense describes only what ships today** (planned work goes under Future Work, nowhere else), and **absences are stated, not omitted** (no tests / no CI / no monitoring — say so, because a deleted section reads as a capability). Scale the sections to the project — a CLI tool needs no evaluation section. Self-discipline shape like reporting-style; **no hook enforces this** — the only place it's checked is `/docs-audit` step 1, which is agent judgment against a checklist, runs on demand, and reviews an existing README after the fact rather than gating a new one. Full rule, anti-pattern table, and pre-publish verification list: @.claude/rules/readme-quality.md
-- **Write documentation as though it were always true** -- a document describes the system as it stands, for a reader who doesn't know it yet. Pick one Diataxis mode per document (tutorial · how-to · reference · explanation) and stay in it; give every rule its reason; link rather than duplicate; scale to the subject. The leak to watch for is **changelog voice** — "since #3…", "previously…" — which is correct in a commit and wrong in a document, because it makes the reader reconstruct the present by diffing prose. Two non-negotiable honesty rails, shared with README quality: **present tense describes only what ships today** — and in a governance framework its sharpest form is **never describing enforcement that doesn't exist**, since a rule that reads as hook-backed gets trusted as hook-backed; and **absences are stated, not omitted**. Carries the canonical **which-voice-belongs-where** table that the other writing rules link to instead of restating. Self-discipline; the only check is `/docs-audit`, on demand and after the fact. Full rule, mode table, and anti-patterns: @.claude/rules/docs-quality.md
-- **Comment the why and the trap, never the what** -- the code already says what happens and is authoritative in a way a comment can't be, so a comment earns its place only by carrying what isn't recoverable from the lines below it: why this and not the obvious alternative, the portability trap, the check deliberately left out, and which way a guard fails. Two rails: **a comment describes current behaviour** — change it in the same edit as the code, because nothing will remind you and a stale comment is believed; and **reference history only when the past IS the reason** — state current behaviour first, then the reason. Self-discipline plus one advisory check: Rex carries "comments explain why, not what" on its review checklist, but it only sees comments the diff touches. Full rule and anti-patterns: @.claude/rules/comment-quality.md
-- **Isolated builds for multi-repo git** -- when building or testing a repo other than the current one, use `git worktree add` off a persistent clone (never `/tmp`, which can be cleaned mid-session), always `cd <dir> || exit 1` in dir-changing bash blocks, and never `git reset --hard` without confirming `git rev-parse --show-toplevel` names the intended repo. The `Agent` tool's `isolation: "worktree"` is the standard for spawned build agents. Self-discipline shape like plan-mode; advisory backstop only. Full heuristic: @.claude/rules/isolated-builds.md
-- **Agent role selection at the spawn boundary** -- when spawning substantive build/coding/design work via the `Agent` tool (a single call, a `/fan-out` batch, or a `Workflow` fleet stage), pick the role-appropriate `subagent_type` (backend/domain/API/DB → `backend-engineer`; UI/components/design-system → `frontend-engineer`; hooks/CI/IaC/tooling → `platform-engineer`; docs/tech-design/task-breakdown → `tech-lead`; PRD/stories → `product-manager`; data → `data-engineer`; visual/UX → `ui-designer`/`ux-designer`) -- never default to generic `general-purpose`/`claude` for work that has a role home. Reserve `general-purpose`/`Explore` for genuine research/search with no role home. Self-discipline shape like parallel-work; no mechanical spawn-boundary guard shipped yet. Full mapping: @.claude/rules/agent-role-selection.md
-- **Skill first for audit/diagram/spec/ticket-shaped work** -- before doing threat-model, DFD, audit, PRD, or ticket-shaped work by hand, check whether a shipped skill already owns it (`/threat-model`, `/dfd`, `/write-spec`, `/bug`, `/decide`, …) — a skill's template, structured export, and cross-checks beat an improvised equivalent. Same self-discipline shape as plan-mode / agent-role-selection; backstopped by the advisory `detect-skill-intent.sh` hook (the SKILL-side sibling of `detect-role-trigger.sh`). Full heuristic: @.claude/rules/skill-first.md (me2resh/apexyard#894)
-- **Reconcile before build** -- before spawning a build agent (single `Agent` call, `/fan-out` batch, or `Workflow` stage) for a ticket, include a "reconcile with existing state first" step in the brief: grep the repo for the feature, check `gh pr list --search "<N> in:title,body" --state merged`, read the issue's own comments, and check for a sibling-repo duplicate. An OPEN issue is not a reliable "undone" signal — `Refs #N` merges don't auto-close, and the release-cut model keeps dev-merged issues open until a release — so a ticket can be fully shipped yet still read OPEN. Same self-discipline shape as agent-role-selection; no mechanical enforcement (a hook can't see a spawn brief). Full heuristic: @.claude/rules/reconcile-before-build.md (me2resh/apexyard#922)
-- **On-demand glossary lookup, any session** -- when an adopter asks "what's a `<term>`?" for one of the five core SDLC terms (issue/ticket, PR, merge, branch, CI), resolve it from `docs/onboarding/glossary.md` and answer in plain language, in the current onboarding depth mode's verbosity, regardless of which skill (if any) is active — then resume where the conversation was. The reactive, any-session sibling of `/onboard`'s proactive just-in-time asides. Self-discipline shape like reporting-style; advisory only, no hook (a shell hook can't see a plain-language question in assistant prose). Full heuristic: @.claude/rules/glossary-lookup.md (me2resh/apexyard#915)
+- **Explicit per-PR human approval before every merge** -- plan-level "go" / "continue" / "ship it" authorizes everything in the plan *except* the merge. Stop and ask each time. The approval skills are human-invocable only.
 - **No hardcoded secrets** -- use environment variables
+
+Every rule file in `.claude/rules/` is already loaded — the table below is a trigger index, not a summary. When you hit a trigger, the rule is in context; act on it.
+
+| Read the rule when you are about to… | Rule |
+|---|---|
+| name work in conversation — `Ticket`, `#N`, `blocked by #N` mean real tracker issues only; in chat use `Step N` | `ticket-vocabulary` |
+| branch, title a PR, or write a commit — these are enforced, not warned; the validators exit 2 | `git-conventions` |
+| merge, review, or approve | `pr-workflow`, `pr-quality`, `workflow-gates` |
+| start work of ≥4 dependent steps, an unclear path, or anything hard to reverse | `plan-mode` |
+| run the same build→verify cycle over ≥2 items | `loop-mode` |
+| split independent work across parallel agents | `parallel-work` |
+| spawn a build agent — pick the role-appropriate `subagent_type`, and reconcile the ticket against shipped state first | `agent-role-selection`, `reconcile-before-build` |
+| spin up review ceremony — match it to the change; security, trust-chain, and migrations never go Lean | `right-size-ceremony` |
+| hand-roll audit, diagram, spec, or ticket-shaped work a skill already owns | `skill-first` |
+| build, test, or run destructive git in another repo | `isolated-builds` |
+| write a README, a doc, or an in-code comment | `readme-quality`, `docs-quality`, `comment-quality` |
+| narrate status back to the operator | `reporting-style` |
+| answer "what's a `<term>`?" for a core SDLC term | `glossary-lookup` |
+| write to a public framework repo from a private portfolio | `leak-protection` |
+| make a material technical decision | `agdr-decisions` |
 
 ### Code Review
 
-Full process: @workflows/code-review.md
+`Read` [`workflows/code-review.md`](workflows/code-review.md) before reviewing a PR by hand or handing a review off — it carries the reviewer checklist and the severity conventions. The automated first pass is Rex, whose behaviour loads from `.claude/agents/code-reviewer.md` when that agent spawns.
 
 Every PR must include:
 
@@ -138,7 +144,7 @@ Every PR must include:
 
 ### Technical Decisions
 
-Before making a **material** technical decision — one that is architectural, hard to reverse, or cross-cutting (a new dependency or technology, a new service or integration, a data-model or schema change, a security-relevant control, CI/CD or infra design, a repo-wide pattern) — create an Agent Decision Record (AgDR). Routine implementation choices that are reversible inside one PR do **not** need one. Full threshold, the two rails, and the "does NOT need an AgDR" list: @.claude/rules/agdr-decisions.md
+Before making a **material** technical decision — one that is architectural, hard to reverse, or cross-cutting (a new dependency or technology, a new service or integration, a data-model or schema change, a security-relevant control, CI/CD or infra design, a repo-wide pattern) — create an Agent Decision Record (AgDR). Routine implementation choices that are reversible inside one PR do **not** need one. Full threshold, the two rails, and the "does NOT need an AgDR" list: [`.claude/rules/agdr-decisions.md`](.claude/rules/agdr-decisions.md).
 
 Template: @templates/agdr.md
 
@@ -168,32 +174,7 @@ Template: @templates/agdr.md
 
 ## GIT CONVENTIONS
 
-### Branch Naming
-
-Format: `{type}/{TICKET-ID}-{description}`
-
-Types: feature, fix, refactor, chore, docs, test
-
-### PR Title Format
-
-Format: `type(TICKET): description`
-
-Examples: `feat(#42): add user auth`, `fix(APE-123): login bug`
-
-### Commit Messages
-
-```
-type: subject
-
-- Detailed change 1
-- Detailed change 2
-
-Closes #123
-```
-
-### File Staging
-
-NEVER use `git add -A` or `git add .` -- always add specific files.
+Branch naming, PR-title format, commit shape, and the never-`git add -A` rule all live in `.claude/rules/git-conventions.md`, which is already loaded. They are enforced, not advisory — the validators exit 2 on a malformed branch or PR title. The one convention below is **not** in that rule file, because it is about this repository rather than about git.
 
 ### Branch model — framework only
 
@@ -289,7 +270,7 @@ One-line summary per skill; canonical details live in each `.claude/skills/<name
 | `/stakeholder-update` | Generate weekly / monthly / launch stakeholder updates |
 | `/fan-out` | Spawn N parallel agents in one message (per-task agent type, worktree isolation) |
 
-The hooks, agents, and skills are picked up automatically by Claude Code when this directory lives at the project root. The rules are imported via `@.claude/rules/*.md` from your project's `CLAUDE.md`.
+Claude Code picks all of this up automatically when the directory sits at the project root — hooks, agents, skills, and the rules. Every `.claude/rules/*.md` file is loaded into the session whether or not `CLAUDE.md` names it, so a rule is live the moment the file exists; an `@` import adds nothing. That is not true of files outside `.claude/rules/` — `workflows/`, `templates/`, and anything else load **only** via an explicit `@` import, which is why the SDLC and code-review docs above are read on demand instead.
 
 See `docs/getting-started.md` for the integration model — including how to install the `.claude/` layer alongside the rest of the stack.
 
