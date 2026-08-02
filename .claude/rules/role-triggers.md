@@ -146,7 +146,7 @@ Two of the rows above encode a **practitioner-reviews / head-escalates** split �
 
 ## Aspirational → Real
 
-Before this rule existed, the 19 role files were passive markdown docs — no trigger, no activation, no automatic reference from workflows or skills. A user had to manually say *"please read `roles/engineering/qa-engineer.md` and act as the QA Engineer"* for anything to happen.
+Before this rule existed, the role files were passive markdown docs — no trigger, no activation, no automatic reference from workflows or skills. A user had to manually say *"please read `roles/engineering/qa-engineer.md` and act as the QA Engineer"* for anything to happen.
 
 This file closes that gap. When in a Claude Code session under apexyard, the trigger table drives which role activates, and the workflow and skill files now explicitly reference the role files at every phase boundary. Roles are now **first-class participants** in the SDLC, not reference material.
 
@@ -160,7 +160,7 @@ Same advisory shape as `check-upstream-drift.sh` — non-blocking, exit 0 always
 
 Each banner reads the matched role's `**Class**:` value from the `## Activation mode` section of the role file and emits one of two shapes:
 
-- **Isolated-work-class** (12 roles: Heads-of-X, Tech Lead, QA Engineer, SRE, Security Auditor, Pen Tester, Product Analyst, Data Analyst): the banner instructs the agent to **SPAWN the sub-agent via the Agent tool** with `subagent_type: <slug>`, naming both the canonical role file at `roles/<dept>/<role>.md` and the agent wrapper at `.claude/agents/<slug>.md`. Per AgDR-0050 § Axis 6, isolated work benefits from isolated context + tool restriction.
+- **Isolated-work-class** (13 roles: Heads-of-X, Tech Lead, Solution Architect, QA Engineer, SRE, Security Auditor, Pen Tester, Product Analyst, Data Analyst): the banner instructs the agent to **SPAWN the sub-agent via the Agent tool** with `subagent_type: <slug>`, naming both the canonical role file at `roles/<dept>/<role>.md` and the agent wrapper at `.claude/agents/<slug>.md`. Per AgDR-0050 § Axis 6, isolated work benefits from isolated context + tool restriction.
 - **In-flow-class** (7 roles: Backend / Frontend / Platform Engineer, Product Manager, UI / UX Designer, Data Engineer): the banner instructs the agent to **adopt the persona IN-THREAD** by reading `roles/<dept>/<role>.md`. Per AgDR-0050 § Axis 6, in-flow work loses too much shared context if spawned out-of-thread.
 
 One naming exception: the Security Auditor role (`roles/security/security-auditor.md`) maps to the `security-reviewer` agent slug, not `security-auditor`. This is the Hatim→Hakim consolidation from PR #360 — the agent filename was preserved so `/security-review` and the auto-fire trigger keep working. The hook handles the exception via `agent_slug_for()`.

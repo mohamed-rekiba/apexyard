@@ -759,7 +759,7 @@ your-org/apexyard/                ← your fork, cloned locally (the "ops repo")
 │   ├── agents/
 │   └── settings.json
 │
-├── roles/                         ← 19 role definitions, upstream from apexyard
+├── roles/                         ← 20 role definitions, upstream from apexyard
 │   ├── engineering/
 │   ├── product/
 │   ├── design/
