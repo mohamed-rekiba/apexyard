@@ -66,9 +66,12 @@ bin/run-hook-tests.sh            # everything
 bin/run-hook-tests.sh <filter>   # just the ones you're changing
 ```
 
-They run on every PR, along with shellcheck, markdown lint, CodeQL, and a PR-title check.
+They run on every PR, alongside a PR-title check, plus CodeQL, shellcheck, and markdown lint — those last three are path- or branch-filtered, so a given PR may not trigger all of them.
 
-Two things deliberately don't run per-PR, and it's worth being precise about them. Secret and SAST scanning (gitleaks + Semgrep) is **release-gated**, not per-commit. And there is **no dependency scanning at all** — the framework is bash and markdown with no `package.json`, `requirements.txt`, or `pyproject.toml`, so there's nothing to audit. That's a property of having no dependencies, not a gap someone forgot to fill.
+Two gaps are worth stating plainly rather than leaving you to discover them:
+
+- **Secret and SAST scanning is release-gated**, not per-commit. gitleaks and Semgrep run on tags and published releases, so a secret introduced mid-branch isn't caught until the release cut.
+- **The two harness adapters have unaudited npm dependencies.** `harness-adapters/opencode` and `harness-adapters/pi` each carry a third-party package and a committed lockfile, and the daily conformance job `npm install`s both — with credentials. Dependabot is configured for GitHub Actions only, so nothing watches those packages for advisories. The framework core is genuinely dependency-free bash and markdown; the adapters are not, and that distinction had been blurred in this README and in two source comments.
 
 **The harness adapters are verified against real sessions, not by construction.** A daily credentialed [Conformance CI](docs/conformance-ci.md) job drives opencode, pi, and Codex and confirms an ungated action is actually refused by the real bash hook. That's the difference between "we wired it up" and "we watched it block something."
 

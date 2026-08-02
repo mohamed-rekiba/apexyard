@@ -1,9 +1,14 @@
 version: 2
 updates:
-  # The framework has no package manifests (no package.json / requirements.txt /
-  # go.mod) — its only declared dependency surface is the GitHub Actions pinned
-  # in .github/workflows/**. Keep those patched. If a manifest is added later,
-  # add its ecosystem here. #518. (site/ moved to me2resh/apexyard-site, #663)
+  # The framework CORE has no package manifest — its declared dependency
+  # surface is the GitHub Actions pinned in .github/workflows/**. Keep those
+  # patched. #518. (site/ moved to me2resh/apexyard-site, #663)
+  #
+  # NOT covered, and it should be: harness-adapters/opencode and
+  # harness-adapters/pi each ship a package.json + lockfile with a third-party
+  # dependency, and conformance.yml `npm install`s both in a credentialed job.
+  # Adding an "npm" ecosystem entry per directory is the fix; it is deliberately
+  # not bundled into the docs change that found this, so it gets its own review.
   - package-ecosystem: "github-actions"
     directory: "/"
     # Follow the release-cut model — open bump PRs against dev, not the default

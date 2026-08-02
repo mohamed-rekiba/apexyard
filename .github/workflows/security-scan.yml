@@ -11,9 +11,14 @@
 #   SAST        : Semgrep r/bash — shell hook scripts under .claude/hooks/**
 #                 No JS/TS source (site/ moved to me2resh/apexyard-site, #663).
 #                 CodeQL/ESLint would have nothing to scan.
-#   Dep audits  : N/A — no package.json, requirements.txt, or pyproject.toml
-#                 in this repo. Marked explicitly so adopters aren't confused.
-#   SBOM/licence: N/A — no third-party deps. Trivial SBOM = not worth generating.
+#   Dep audits  : NOT RUN, and that is a gap rather than N/A. The framework
+#                 core has no manifest, but harness-adapters/{opencode,pi}
+#                 each ship a package.json + lockfile with a third-party
+#                 dependency, and conformance.yml `npm install`s both inside a
+#                 credentialed job. dependabot.yml watches github-actions only,
+#                 so nothing tracks advisories for those two packages.
+#   SBOM/licence: not generated. Same caveat — the adapters do have third-party
+#                 deps, so "no deps" is true of the core only.
 #
 # Fail threshold: WARNING+ (equivalent to "medium+"). INFO findings are reported
 # in the step summary but do not block.
