@@ -4,15 +4,28 @@
 
 ApexYard ships markdown templates under `templates/` that consuming skills read at invocation time — `/decide` reads `agdr.md`, `/write-spec` reads `prd.md`, `/c4` reads `architecture/c4-context.md` and `architecture/c4-container.md` (and `architecture/c4-structurizr.dsl` when invoked with `--dsl`), `/migration` reads `agdr-migration.md` (for the AgDR) AND `tickets/migration.md` (for the ticket body), `/spike` reads `tickets/spike.md`, `/investigation` reads `tickets/investigation.md`, `/feature` / `/bug` / `/task` / `/idea` read their matching files under `tickets/`, `/handover` reads `architecture/c4-container.md`. The full inventory is in [`CLAUDE.md` § "Templates"](../CLAUDE.md).
 
-One template has no single consuming skill: **`project-readme.md`** is the shape for a managed project's own `README.md`, authored against the standard in [`.claude/rules/readme-quality.md`](../.claude/rules/readme-quality.md). It is referenced by `/handover` (as the shape for its "write the README" follow-up task) and audited by `/docs-audit` step 1. Note the filename — it is deliberately **not** `readme.md`, which on a case-insensitive filesystem (macOS, Windows) would collide with this file.
+## Writing-surface templates — no single consuming skill
 
-## `tickets/` subdir — uniform ticket body templates (since #281)
+Four templates are not read by one skill at invocation time. They are the shapes an author works against, each paired with a rule that states the standard:
 
-Every ticket-creating skill (`/feature`, `/bug`, `/task`, `/migration`, `/idea`, `/spike`, `/investigation`) reads its issue-body shape from `templates/tickets/<name>.md`. Adopters override any of them by dropping a file at `<private_repo>/custom-templates/tickets/<name>.md` — same path-mirroring contract as every other template (AgDR-0023, refactored to apply uniformly to all 7 ticket types in AgDR-0031).
+| Template | Surface | Standard | Where it's checked |
+|----------|---------|----------|--------------------|
+| `project-readme.md` | A project's own `README.md` | [`readme-quality.md`](../.claude/rules/readme-quality.md) | `/docs-audit` step 1; referenced by `/handover` |
+| `documentation.md` | Guides, runbooks, rules, reference pages | [`docs-quality.md`](../.claude/rules/docs-quality.md) | `/docs-audit` step 2 |
+| `code-comments.md` | In-code comments | [`comment-quality.md`](../.claude/rules/comment-quality.md) | Rex's review checklist (advisory) |
+| `commit-message.md` | Commit subjects and bodies | [`git-conventions.md`](../.claude/rules/git-conventions.md) § "Commit Message Content" | Format hooks only; content is self-discipline |
 
-Prior to #281, the 5 older skills (`/feature`, `/bug`, `/task`, `/migration`, `/idea`) constructed their issue body inline via heredoc; only `/spike` and `/investigation` shipped a real template file. That meant a `<private_repo>/custom-templates/feature.md` override silently failed — the framework had no template file at the mirrored path for the override to win over. #281 closes that gap by adding the missing 5 template files and refactoring the 5 skills to resolve via `portfolio_resolve_template tickets/<name>.md`.
+`code-comments.md` is a **pattern catalogue rather than a form** — comments have no document shape to fill in, so it lists the four comments that earn their place with a copyable skeleton for each. The other three are fill-in templates like the rest of this directory.
 
-**Backward-compat fallback**: if the resolved template file is missing (partial adopter setup), each skill falls back to its inline heredoc body and prints a one-line WARN on stderr. This preserves the pre-#281 behaviour for installations whose `templates/tickets/` dir is missing.
+Note `project-readme.md`'s filename — it is deliberately **not** `readme.md`, which on a case-insensitive filesystem (macOS, Windows) would collide with this file.
+
+## `tickets/` subdir — uniform ticket body templates
+
+Every ticket-creating skill (`/feature`, `/bug`, `/task`, `/migration`, `/idea`, `/spike`, `/investigation`) reads its issue-body shape from `templates/tickets/<name>.md`. Adopters override any of them by dropping a file at `<private_repo>/custom-templates/tickets/<name>.md` — same path-mirroring contract as every other template (AgDR-0023, applied uniformly to all 7 ticket types in AgDR-0031).
+
+All seven have a real template file, and that uniformity is load-bearing: an override only wins when the framework ships a file at the mirrored path for it to win over. A skill that built its body inline instead would make `custom-templates/feature.md` fail silently — the adopter drops the file, nothing changes, and nothing says why (#281).
+
+**Backward-compat fallback**: if the resolved template file is missing (partial adopter setup), each skill falls back to an inline heredoc body and prints a one-line WARN on stderr, so an installation with no `templates/tickets/` dir still files tickets.
 
 ## Adopter overrides — the `custom-templates/` layer
 
@@ -22,6 +35,9 @@ Every framework template can be overridden by an adopter-authored version. The o
 |--------------------|---------------------------|
 | `templates/prd.md` | `<private_repo>/custom-templates/prd.md` |
 | `templates/project-readme.md` | `<private_repo>/custom-templates/project-readme.md` |
+| `templates/documentation.md` | `<private_repo>/custom-templates/documentation.md` |
+| `templates/code-comments.md` | `<private_repo>/custom-templates/code-comments.md` |
+| `templates/commit-message.md` | `<private_repo>/custom-templates/commit-message.md` |
 | `templates/agdr.md` | `<private_repo>/custom-templates/agdr.md` |
 | `templates/agdr-migration.md` | `<private_repo>/custom-templates/agdr-migration.md` |
 | `templates/tickets/feature.md` | `<private_repo>/custom-templates/tickets/feature.md` |

@@ -91,7 +91,7 @@ CEO: /approve-merge 10          ← CORRECT: the CEO invokes it. The skill is
 
 CEO approval is meant to be a **discrete moment per PR**. Merges are hard to reverse, externally visible, and can trigger downstream deploys. An umbrella "go" on a plan does not give you enough evidence that the CEO consciously signed off on each merge. When in doubt: stop and ask for the per-PR explicit nod.
 
-The discrete moment is the **invocation of `/approve-merge`**, and since #1042 that invocation can only come from a human — `disable-model-invocation: true`. Saying "approved" in prose is no longer sufficient on its own; the model's job is to get the PR ready and say so. Treat the invocation with the seriousness the merge warrants: once it runs, the merge runs.
+The discrete moment is the **invocation of `/approve-merge`**, and that invocation can only come from a human — the skill carries `disable-model-invocation: true` (#1042). Saying "approved" in prose is not sufficient on its own; the model's job is to get the PR ready and say so. Treat the invocation with the seriousness the merge warrants: once it runs, the merge runs.
 
 This rule also applies to other destructive / externally-visible / hard-to-reverse actions: force pushes, branch deletes, closing issues with dependents, posting to external channels. Plan-level "go" does not carry through to any of these. List them in the plan if you want — just stop before executing and ask.
 
@@ -161,7 +161,7 @@ Claude can technically `rm` or `touch` these files by hand, or fabricate the str
 
 ### The approval skills are human-only (#1042, AgDR-0110)
 
-"Explicit per-PR approval" is now enforced **mechanically**, not only in prose. `/approve-merge`, `/approve-design`, and `/approve-architecture` carry `disable-model-invocation: true`, so **only a human can invoke them**. Saying "approved" in conversation is no longer sufficient on its own — the operator types the command, and that invocation *is* the approval moment this rule has always described.
+"Explicit per-PR approval" is enforced **mechanically**, not only in prose. `/approve-merge`, `/approve-design`, and `/approve-architecture` carry `disable-model-invocation: true`, so **only a human can invoke them**. Saying "approved" in conversation is not sufficient on its own — the operator types the command, and that invocation *is* the approval moment this rule describes.
 
 The mirror half matters just as much: the **review** skills (`/code-review`, `/security-review`, `/design-review`) are model-invocable, so the orchestrator triggers them itself — as `auto-code-review.sh` has always instructed. Independence comes from the reviewer being a **separate sub-agent with its own context**, not from who typed the command, so nothing is lost by letting the model start a review.
 

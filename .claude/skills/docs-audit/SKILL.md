@@ -72,14 +72,34 @@ This step judges content, not section presence — a stricter bar than the prese
 
 It isn't a regression, and reporting it as one wastes the operator's attention. When the previous run for this project predates the new bar, note the re-baseline in the output alongside the trend line.
 
-### Step 2: API documentation (if applicable)
+### Step 2: Every other document
+
+Step 1 covers the front door. This step covers everything behind it — guides, runbooks, rule files, skill docs, reference pages — against [`.claude/rules/docs-quality.md`](../../rules/docs-quality.md), the framework's documentation authoring standard, and the shape it authors against, `templates/documentation.md`.
+
+Sample rather than exhaust: read the documents a new adopter would actually open (whatever `README.md` and `docs/` index link to first), plus any document changed in the audited range. Judge each on:
+
+| Check | Severity | How to detect |
+|-------|----------|---------------|
+| Describes enforcement, a gate, or a guarantee that does not exist | **high** | Trace every "enforced by" / "blocks" / "requires" claim to a real hook, test, or CI job — and confirm it blocks rather than warns |
+| Present-tense description of an unbuilt capability | **high** | Cross-check claimed behaviour against the code |
+| Commands, flags, config keys, or env vars that don't match the repo | **high** | Cross-check against real tooling and the code that reads them |
+| **Changelog voice** — "since #N…", "previously…", "this now does…" | medium | Grep for `since #`, `previously`, `used to`, `as of`; each hit is a finding unless the file is an AgDR/ADR, where past tense is correct |
+| Mixed Diataxis modes in one document | medium | A tutorial that stops to enumerate options; a reference that narrates |
+| Content duplicated from another document rather than linked | medium | Look for repeated tables and paragraphs across files |
+| Rules stated without their reason | low | A "always/never do X" with no because-clause |
+| Undated relative time — "recently", "soon", "currently" | low | Grep |
+| Broken cross-references after a rename | medium | Resolve every relative link |
+
+Report these under the same `D<n>` numbering as the rest of the audit. A document that is merely thin is a low finding; one that describes a gate nobody built is a high one, because readers stop checking the thing themselves.
+
+### Step 3: API documentation (if applicable)
 
 - Check for OpenAPI / Swagger spec (`openapi.yaml`, `swagger.json`)
 - Check for auto-generated docs (Swagger UI, Redoc, tsdoc, typedoc)
 - Check if endpoints in the code match the spec (any undocumented endpoints?)
 - Check for example requests and responses
 
-### Step 3: Operational docs
+### Step 4: Operational docs
 
 - Deployment guide: how to deploy, what environment variables are needed
 - Runbook: what to do when things go wrong (overlap with `/monitoring-audit`)
@@ -87,14 +107,14 @@ It isn't a regression, and reporting it as one wastes the operator's attention. 
 - Architecture overview: high-level diagram or description of components
 - AgDRs/ADRs: are technical decisions documented?
 
-### Step 4: Staleness detection
+### Step 5: Staleness detection
 
 - Compare `README.md` last-modified date with recent code changes
 - Check if API docs mention endpoints/features that no longer exist
 - Check if environment variable docs list vars that are no longer used
 - Flag docs that reference deprecated tools, libraries, or patterns
 
-### Step 5: Output
+### Step 6: Output
 
 ```
 DOCS AUDIT — <project> @ <sha>

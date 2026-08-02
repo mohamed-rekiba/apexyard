@@ -156,7 +156,7 @@ Self-discipline (the agent remembering to read the role file when the rule fires
 
 Same advisory shape as `check-upstream-drift.sh` — non-blocking, exit 0 always. The banner cannot force the agent to adopt the role, but it removes the "I forgot the rule applied here" failure mode.
 
-#### Class-aware banner (HYBRID, AgDR-0050 § Axis 6 — live since #347 PR 5)
+#### Class-aware banner (HYBRID, AgDR-0050 § Axis 6, #347)
 
 Each banner reads the matched role's `**Class**:` value from the `## Activation mode` section of the role file and emits one of two shapes:
 

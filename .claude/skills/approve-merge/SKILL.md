@@ -543,7 +543,7 @@ You: "All other steps done. PR #X is ready to merge — run /approve-merge X whe
 CEO: /approve-merge X          ← writes the structured marker AND merges in one turn
 ```
 
-The discrete approval moment is **the invocation of /approve-merge**, not a separate "now do the merge" message. Since #1042 that invocation is mechanically restricted to a human (`disable-model-invocation: true`), so the model's job ends at getting the PR ready and saying so. Treat the invocation with the seriousness the merge warrants: once it runs, the merge runs.
+The discrete approval moment is **the invocation of /approve-merge**, not a separate "now do the merge" message. That invocation is mechanically restricted to a human (`disable-model-invocation: true`, #1042), so the model's job ends at getting the PR ready and saying so. Treat the invocation with the seriousness the merge warrants: once it runs, the merge runs.
 
 ---
 

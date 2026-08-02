@@ -2,7 +2,9 @@
 
 When you report status to the operator in-thread, write like a colleague giving a spoken update — not a machine printing a report. This is the conversational-update sibling of the PR-summary rule in [`pr-quality.md`](pr-quality.md) § "Summary bullets — narrative quality": both say *deliver the substance in human language, don't dump structure*.
 
-This rule is about **how you narrate status back to the operator** — the "here's where we landed" messages after you finish a chunk of work. It is not about code comments, PR bodies (that's `pr-quality.md`), or commit messages (that's `git-conventions.md`).
+This rule is about **how you narrate status back to the operator** — the "here's where we landed" messages after you finish a chunk of work. It is not about code comments (that's [`comment-quality.md`](comment-quality.md)), PR bodies ([`pr-quality.md`](pr-quality.md)), commit messages ([`git-conventions.md`](git-conventions.md)), or documentation ([`docs-quality.md`](docs-quality.md)). Each of those has a different reader and a different tense; the canonical breakdown lives in [`docs-quality.md`](docs-quality.md) § "Which voice belongs where".
+
+The reader here is the operator, and the moment is now. That is what makes this the only writing surface where a spoken register is correct.
 
 ## The rule
 
