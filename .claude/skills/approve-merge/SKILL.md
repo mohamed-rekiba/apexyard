@@ -237,11 +237,25 @@ Unless `--no-merge` was passed, run the merge in the same turn via the tracker-a
 # instead, and read it back in a separate step — `cat` isn't a merge
 # command, so wrapping THAT in `$(...)` is fine.
 #
-# The repo argument is $PR_HOST_REPO — the PR's BASE repo (#765). On a cross-fork
-# PR you cannot merge the fork's copy; the merge, like every other host call in
-# this skill, must target the base (`<owner/repo>` throughout = $PR_HOST_REPO).
+# PASS THE REPO AS A LITERAL, NEVER AS "$PR_HOST_REPO" (me2resh/apexyard#7).
+#
+# This snippet used to show the variable form, and it could not pass this
+# skill's own gate. `_lib-extract-pr.sh` reads the RAW command text and — by
+# deliberate design, never to be changed — does not eval it. So a variable
+# arrives as the literal 13 characters `$PR_HOST_REPO`, which the gate then
+# interpolates into a marker path:
+#
+#   BLOCKED: PR #23 has no recorded code-reviewer (Rex) approval.
+#   Missing file: .../reviews/$PR_HOST_REPO__23-rex.approved
+#
+# The reviews were on disk and valid; the merge was blocked anyway, and the
+# error pointed at the wrong cause. Substitute the value you resolved in step 4
+# and write it out. Same rule, same reason, as step 8a's label call.
+#
+# The value is still the PR's BASE repo (#765) — on a cross-fork PR you cannot
+# merge the fork's copy, so `<owner/repo>` throughout means the base repo.
 MERGE_RESULT_FILE=$(mktemp)
-tracker_pr_merge "$PR_HOST_REPO" "<pr>" "${MERGE_STRATEGY}" true > "$MERGE_RESULT_FILE"
+tracker_pr_merge "owner/repo" "<pr>" "${MERGE_STRATEGY}" true > "$MERGE_RESULT_FILE"
 MERGE_RC=$?
 MERGE_RESULT="$(cat "$MERGE_RESULT_FILE")"
 MERGE_SHA=$(printf '%s' "$MERGE_RESULT" | jq -r '.sha // empty' 2>/dev/null)

@@ -207,8 +207,123 @@ _bdw_starts_with_git_subcommand() {
 # `<(…)` (process substitution on the read side) was never matched here
 # to begin with (`<` alone isn't a write operator in this file), so no
 # change was needed for that half.
+# QUOTED TEXT IS NOT SHELL SYNTAX (me2resh/apexyard#7).
+#
+# The redirect pattern below scans raw command text, so any `>` reached it —
+# including one inside a quoted string, where it is data rather than an
+# operator. Three false positives were reproduced while measuring this:
+#
+#   echo "a -> b"                    → target "b"        (arrow in prose)
+#   echo '{"tool_input":{...}}'      → target 'b\""}}'   (JSON)
+#   gh issue create --body "...merge…" → blocked a read-only issue filing
+#
+# Each cost a retry cycle, and the class is the one AgDR-0104 says cannot be
+# made sound by pattern-matching alone. Blanking the CONTENTS of quoted spans
+# before the scan removes the data/operator confusion at its source.
+#
+# THE EXCEPTION THAT MAKES THIS SAFE. A shell invoked with -c re-parses its
+# quoted argument, so `bash -c "echo x > file"` really does write, and the
+# redirect really is inside quotes. Blanking there would convert a
+# false-positive fix into a genuine BYPASS of the ticket gate — strictly
+# worse than the noise it removes. `_bdw_match_script_runner` covers go/deno/
+# bun but NOT sh/bash/zsh -c, so nothing else would catch it. Hence the guard:
+# when the command hands a string to a shell (or `eval`), the full text is
+# scanned exactly as before.
+#
+# Interpreter-hidden writes in other languages are unaffected either way —
+# python -c, node -e, ruby -e, perl -e and php -r each have their own
+# dedicated matcher above and do not rely on this one.
+# WHY A SCANNER AND NOT TWO seds. The first implementation was
+# `sed "s/'[^']*'/''/g"` then `sed 's/"[^"]*"/""/g'`, and security review found
+# four HIGH bypasses in it. Regex cannot do this job, for two structural
+# reasons:
+#
+#   1. Quoting is STATEFUL. `echo "it's" > "won't.ts"` contains two apostrophes
+#      that are ordinary letters inside double-quoted words. A single-quote
+#      regex pass sees them as a matched pair, blanks everything between —
+#      including the real `>` — and the write vanishes. That needs no
+#      adversarial intent; English prose with two apostrophes is enough.
+#   2. Double quotes are NOT inert. The shell re-parses `$(…)` and backticks
+#      inside them, so `echo "$(date > f)"` really does write.
+#
+# The scanner below tracks quote state character by character and blanks only
+# spans that genuinely cannot re-parse:
+#
+#   single-quoted        always inert  → blanked
+#   double-quoted        inert ONLY when it contains no `$` and no backtick
+#   unterminated span    emitted RAW   → fail closed, never lose an operator
+#
+# Blanking replaces the span's CONTENTS, leaving the delimiters, so token
+# boundaries and the redirect grammar around them are preserved.
+_bdw_blank_inert_quoted_spans() {
+  printf '%s' "$1" | awk -v SQ="'" '
+  {
+    out = ""; state = 0; sbuf = ""; dbuf = ""
+    n = length($0)
+    for (i = 1; i <= n; i++) {
+      c = substr($0, i, 1)
+      if (state == 0) {
+        if (c == SQ)       { state = 1; sbuf = ""; out = out c }
+        else if (c == "\"") { state = 2; dbuf = ""; out = out c }
+        else                { out = out c }
+      } else if (state == 1) {
+        if (c == SQ) { state = 0; out = out c }   # contents dropped: inert
+        else         { sbuf = sbuf c }
+      } else {
+        if (c == "\"") {
+          state = 0
+          # Keep the span raw when the shell could re-parse it.
+          if (dbuf ~ /[$`]/) out = out dbuf
+          out = out c
+        } else { dbuf = dbuf c }
+      }
+    }
+    # Unterminated quote (or a newline inside one): emit what we buffered so a
+    # real operator can never be swallowed by an unclosed span.
+    if (state == 1) out = out sbuf
+    if (state == 2) out = out dbuf
+    print out
+  }'
+}
+
+# Does this command hand a string to something that will re-parse it as shell?
+#
+# The anchor must tolerate a PATH before the shell name: the first version
+# required the name to start a token, so `/bin/sh -c "echo x > f"` and
+# `./sh -c …` walked straight through while a bare `sh -c` was caught. Space-
+# separated wrappers (`sudo`, `xargs`, `env`, `timeout`, `nohup`, `find -exec`)
+# were always fine — the space satisfies the anchor — but a `/` was not.
+#
+# `su` and `ssh` are included because both take a command string that a shell
+# elsewhere executes. Erring toward "yes" here only means MORE text is scanned,
+# which is the fail-closed direction.
+_bdw_hands_string_to_shell() {
+  printf '%s' "$1" | grep -qE \
+    '(^|[[:space:]]|;|\||&|\()([^[:space:];|&]*/)?(sh|bash|zsh|ksh|dash|busybox|su)([[:space:]]+-[^[:space:]]+)*[[:space:]]+-[a-zA-Z]*c([[:space:]]|$)|(^|[[:space:]]|;|\||&)(eval|ssh)([[:space:]]|$)'
+}
+
+# THE SINGLE ENTRY POINT. Detection and target EXTRACTION must scan the same
+# text, or they diverge — which is exactly the structural bug #926 round 5
+# identified as the root cause of rounds 1-5, and which the first version of
+# this change reintroduced: detection reported "not a write" while extraction
+# still produced a target for the same command. Divergence in that direction is
+# the dangerous one, because detection gates whether extraction is consulted at
+# all. Route every scan through here.
+_bdw_normalise_for_scan() {
+  local cmd="$1"
+  # A command that re-parses a string as shell keeps its full text: the
+  # quoting we would blank is the very thing the inner shell will execute.
+  if _bdw_hands_string_to_shell "$cmd"; then
+    printf '%s' "$cmd"
+  else
+    _bdw_blank_inert_quoted_spans "$cmd"
+  fi
+}
+
 _bdw_match_redirection() {
-  echo "$1" | grep -qE '(&>>?|(^|[^|<&])>>?\|?|[0-9]*<>)[[:space:]]*[^[:space:]&|;(][^[:space:]&|;]*'
+  local cmd
+  cmd=$(_bdw_normalise_for_scan "$1")
+  echo "$cmd" | grep -qE '(&>>?|(^|[^|<&])>>?\|?|[0-9]*<>)[[:space:]]*[^[:space:]&|;(][^[:space:]&|;]*'
 }
 
 # ------------------------------------------------------------------------------
@@ -580,7 +695,13 @@ bash_command_is_deletion_only() {
 #     empty for `diff a >(sort)` rather than fabricating `(sort)`.
 # ------------------------------------------------------------------------------
 bash_extract_write_target() {
-  local cmd="$1"
+  # Scan the SAME normalised text detection scanned. Without this the two
+  # disagree: detection reports "not a write" for `echo "a -> b"` while
+  # extraction happily returns `b`, and the ticket gate's error message names a
+  # file nobody was writing. Keeping both on _bdw_normalise_for_scan is the
+  # structural fix #926 round 5 called for — see that function's comment.
+  local cmd
+  cmd=$(_bdw_normalise_for_scan "$1")
   [ -z "$cmd" ] && return 0
 
   # Output redirection: capture the first target after >, >>, &>, &>>, >|,

@@ -7,8 +7,24 @@
 # (.github/workflows/tests.yml). See me2resh/apexyard#526.
 #
 # Usage:
-#   bin/run-hook-tests.sh            # run the whole suite
-#   bin/run-hook-tests.sh --list     # list discovered tests, run nothing
+#   bin/run-hook-tests.sh                    # run the whole suite
+#   bin/run-hook-tests.sh --list             # list discovered tests, run nothing
+#   bin/run-hook-tests.sh <filter> [...]     # run only tests whose path matches
+#   bin/run-hook-tests.sh --changed          # run only tests for files changed
+#                                            #   vs the default branch
+#
+# WHY FILTERING EXISTS (me2resh/apexyard#7). The suite is 122 tests and takes
+# ~256s. That cost is FIXED: it was paid identically for a one-line config
+# change and for a six-file diff, because the runner previously accepted no
+# argument but --list. Measured over one long session, repeated full runs were
+# ~26% of all mechanical time. A scoped run of a single test is ~1s.
+#
+# The default is deliberately unchanged — a bare invocation still runs
+# everything, so CI (.github/workflows/tests.yml) and the pre-push gate keep
+# their full-suite guarantee. Filtering is opt-in, for the edit/verify loop
+# where you are iterating on one hook and want the answer in a second rather
+# than four minutes. ALWAYS run the full suite once before pushing; a filtered
+# run cannot tell you what you broke elsewhere.
 #
 # Quarantine: tests that genuinely cannot run headless (or are known-failing
 # and tracked for a fix) are listed in QUARANTINE below, each with a reason.
@@ -64,10 +80,64 @@ done < <(
        -type f \( -name 'test_*.sh' -o -name '*.test.sh' \) 2>/dev/null | sort
 )
 
+TOTAL_DISCOVERED=${#TESTS[@]}
+
 if [ "${1:-}" = "--list" ]; then
-  [ "${#TESTS[@]}" -gt 0 ] && printf '%s\n' "${TESTS[@]}"
-  echo "(${#TESTS[@]} tests discovered)"
+  [ "$TOTAL_DISCOVERED" -gt 0 ] && printf '%s\n' "${TESTS[@]}"
+  echo "($TOTAL_DISCOVERED tests discovered)"
   exit 0
+fi
+
+# --- Optional scoping (#7) -------------------------------------------------
+#
+# `--changed` maps changed files to their tests by BASENAME CONVENTION: a hook
+# or lib named foo-bar.sh is covered by test_foo_bar*.sh (dashes to
+# underscores). That convention is what the tree already follows; it is a
+# heuristic, not a guarantee, which is why the default stays run-everything and
+# why the summary below states plainly how many of the discovered tests ran.
+#
+# Any other arguments are treated as substring filters against the test path.
+FILTERS=()
+if [ "${1:-}" = "--changed" ]; then
+  base=$(git merge-base HEAD origin/HEAD 2>/dev/null \
+      || git merge-base HEAD origin/main 2>/dev/null || echo "")
+  changed=$(if [ -n "$base" ]; then git diff --name-only "$base"...HEAD; fi; git diff --name-only; git diff --name-only --cached)
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    stem=$(basename "$f" .sh); stem=${stem//-/_}
+    FILTERS+=("$stem")
+  done <<< "$(printf '%s\n' "$changed" | sort -u)"
+  if [ "${#FILTERS[@]}" -eq 0 ]; then
+    # Genuinely nothing changed — unlike a non-matching filter, this is a
+    # legitimate no-op rather than a likely typo, so it stays exit 0.
+    echo "--changed: no changed files resolved; nothing to run."
+    exit 0
+  fi
+elif [ "$#" -gt 0 ]; then
+  FILTERS=("$@")
+fi
+
+if [ "${#FILTERS[@]}" -gt 0 ]; then
+  SELECTED=()
+  for t in "${TESTS[@]}"; do
+    for f in "${FILTERS[@]}"; do
+      case "$t" in *"$f"*) SELECTED+=("$t"); break ;; esac
+    done
+  done
+  # Check emptiness BEFORE expanding. Under `set -u`, bash 3.2 (still the
+  # system bash on macOS) errors on "${arr[@]}" when arr is empty, so the
+  # no-match path must exit before the assignment, not after it.
+  if [ "${#SELECTED[@]}" -eq 0 ]; then
+    # Exit NON-ZERO. "Nothing matched" is not success: a typo'd filter in a
+    # script or CI step would otherwise report green having verified nothing —
+    # the same silent-pass failure mode this runner exists to prevent.
+    echo "No tests matched [${FILTERS[*]}]. Run bare to execute all $TOTAL_DISCOVERED." >&2
+    exit 2
+  fi
+  TESTS=("${SELECTED[@]}")
+  echo "Scoped run: ${#TESTS[@]} of $TOTAL_DISCOVERED tests match [${FILTERS[*]}]"
+  echo "NOT a substitute for the full suite — run it bare before pushing."
+  echo
 fi
 
 pass=0 fail=0 skip=0
@@ -98,7 +168,11 @@ done
 
 echo
 echo "============================================================"
-echo "  hook test suite: PASS=$pass  FAIL=$fail  SKIP(quarantined)=$skip  TOTAL=${#TESTS[@]}"
+if [ "${#TESTS[@]}" -ne "$TOTAL_DISCOVERED" ]; then
+  echo "  hook test suite (SCOPED): PASS=$pass  FAIL=$fail  SKIP(quarantined)=$skip  RAN=${#TESTS[@]} of $TOTAL_DISCOVERED"
+else
+  echo "  hook test suite: PASS=$pass  FAIL=$fail  SKIP(quarantined)=$skip  TOTAL=${#TESTS[@]}"
+fi
 echo "============================================================"
 if [ "$fail" -gt 0 ]; then
   printf 'FAILED:\n'; printf '  - %s\n' "${FAILED[@]}"
