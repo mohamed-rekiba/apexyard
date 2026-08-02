@@ -1,6 +1,11 @@
 {
   "_comment": "Framework-repo overrides for project-config.defaults.json. The apexyard framework repo itself dog-foods its own pre-push gate here — see .claude/hooks/pre-push-gate.sh and docs/getting-started.md § 'Terminal push hook'. Managed projects under governance set their own pre_push.commands per their stack.",
 
+  "ticket": {
+    "_qa_label_comment": "Empty string = this fork opts OUT of the mandatory QA stop (Gate 6). Merges apply no QA label and the QA Engineer does not auto-fire; PR bodies use 'Closes #N' so the host closes the ticket natively on merge. This is an adopter opt-out, not a framework change — the gate remains the shipped default in project-config.defaults.json for teams where the author and the verifier are different people. Rationale, and what is given up: docs/agdr/AgDR-0114-opt-out-of-qa-gate.md.",
+    "qa_label": ""
+  },
+
   "pre_push": {
     "_comment": "Commands mirror the locally-runnable CI jobs from .github/workflows/. Each entry guards for a missing tool: a missing tool prints an actionable install message and exits 0 (skip-with-note) so a contributor without the tool is not hard-blocked. Link-check (lychee) is intentionally excluded — it is slow and network-flaky, unsuitable for pre-push. See docs/getting-started.md for the git pre-push hook (core.hooksPath) wiring.",
     "commands": [

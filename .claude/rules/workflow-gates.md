@@ -142,6 +142,16 @@ In Progress → In Review → QA → Done
                     QA must verify
 ```
 
+`/approve-merge` performs the transition: on a successful merge it applies the `qa` label to every ticket the PR references, which auto-fires the QA Engineer via `detect-role-trigger.sh`. PR bodies use `Refs #N` rather than `Closes #N` precisely so the host does not auto-close the ticket and skip the gate.
+
+### Opting out
+
+The gate assumes the **author and the verifier are different people** — a second person confirming that merged code does what its ticket claimed. Where the same person writes and verifies, it costs full ceremony and returns much less.
+
+Set `ticket.qa_label` to `""` in `.claude/project-config.json`. Merges then apply no label, the QA Engineer does not auto-fire, and PR bodies use `Closes #N` so the host closes the ticket on merge.
+
+This is an **opt-out, not a removal** — the gate remains the shipped default in `project-config.defaults.json`, and everything above holds for adopters who keep it. What it gives up: nobody confirms that merged code does what its ticket said. Code review still runs, but it examines the code — whether the code matches the ticket is a different question, and after opting out nobody asks it. Rationale and trade-offs: `docs/agdr/AgDR-0114-opt-out-of-qa-gate.md`.
+
 ---
 
 *Part of [ApexYard](https://github.com/me2resh/apexyard) — multi-project SDLC framework for Claude Code · MIT.*
