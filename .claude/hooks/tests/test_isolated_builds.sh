@@ -8,7 +8,7 @@
 # the artifacts exist and are wired in, so the rule can't silently rot:
 #
 #   1. .claude/rules/isolated-builds.md exists and carries the ApexYard footer.
-#   2. CLAUDE.md imports it via @.claude/rules/isolated-builds.md.
+#   2. CLAUDE.md's trigger index names it, so a reader learns when it applies.
 #   3. CLAUDE.md's rules-count line is updated (14) and names "isolated builds".
 #
 # Test style matches the existing tests/*.sh (e.g. test_reporting_style.sh)
@@ -47,7 +47,7 @@ trigger_index() {
 
 # 2. CLAUDE.md names the rule so a reader knows when it applies.
 # Not an `@` import: every .claude/rules/*.md file loads regardless of whether
-# CLAUDE.md imports it, so the import proved availability that was never in
+# CLAUDE.md named it, so the import proved availability that was never in
 # doubt. The trigger is the part that can actually go missing.
 if trigger_index | grep -q 'isolated-builds'; then
   pass "CLAUDE.md's trigger index names isolated-builds"

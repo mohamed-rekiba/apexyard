@@ -66,7 +66,7 @@ trigger_index() {
 
 # 2. CLAUDE.md names the rule so a reader knows when it applies.
 # Not an `@` import: every .claude/rules/*.md file loads regardless of whether
-# CLAUDE.md imports it, so the import proved availability that was never in
+# CLAUDE.md named it, so the import proved availability that was never in
 # doubt. The trigger is the part that can actually go missing.
 if trigger_index | grep -q 'readme-quality'; then
   pass "CLAUDE.md's trigger index names readme-quality"

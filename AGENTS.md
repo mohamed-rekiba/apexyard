@@ -102,7 +102,7 @@ The rest of this file is for an agent extending **apexyard itself** — its hook
   - `.claude/hooks/` — 42 shell scripts (PreToolUse / PostToolUse / SessionStart)
   - `.claude/skills/` — 64 slash commands (one dir per skill, each with `SKILL.md`)
   - `.claude/agents/` — 23 sub-agents: 3 utility (Rex code-reviewer, Hakim security-reviewer/auditor, Munir dep-auditor) + 20 dept-aligned agents across engineering / product / design / security / data (the pr-manager + ticket-manager lifecycle agents were retired — AgDR-0105; their lifecycles are owned by the merge gates / `/approve-merge` and the structured ticket skills)
-  - `.claude/rules/` — 11 modular rule files imported via `@.claude/rules/*.md` from `CLAUDE.md`
+  - `.claude/rules/` — 22 modular rule files, loaded automatically; `CLAUDE.md` carries the trigger for each, not an import (AgDR-0115)
   - `.claude/settings.json` — hook wiring
 - `roles/` — 19 role definitions across Engineering, Product, Design, Security, Data
 - `workflows/` — SDLC, code-review, deployment workflow docs

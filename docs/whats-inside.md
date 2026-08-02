@@ -35,7 +35,7 @@ apexyard/
 ├── .claude/               # Claude Code primitives (the runnable layer)
 │   ├── settings.json      # Hook wiring (PreToolUse, PostToolUse, SessionStart)
 │   ├── hooks/             # 49 shell scripts — ticket-first, migration gate, two-marker merge gate, red-CI block, secrets scan, branch/PR validation, leak protection, MCP-reindex advisories, upstream-drift banner
-│   ├── rules/             # 18 modular rule files imported via @.claude/rules/*
+│   ├── rules/             # 22 modular rule files, all auto-loaded (no @ import needed)
 │   ├── agents/            # 23 sub-agents — Rex (Code Reviewer), Hakim (Security Auditor), Tariq (Solution Architect), the engineering / product / design / data / security personas, plus utility agents (dependency auditor, The Contrarian)
 │   └── skills/            # 66 slash commands — see CLAUDE.md for the full list
 │
@@ -153,7 +153,7 @@ This is what turns the markdown above into an enforced workflow. Claude Code pic
 | Layer | Path | What it is |
 |-------|------|------------|
 | **Hooks** | `.claude/hooks/` | 49 shell scripts that mechanically enforce SDLC rules — ticket-first edits (Edit/Write/Bash), migration-ticket-first, auto code review, merge gates (Rex + CEO + design + architecture review), red-CI block, commit-format, AgDR-for-arch-changes, branch/PR-title validation, secrets scanning, private-ref leak protection, upstream-drift banner, MCP-reindex advisories |
-| **Rules** | `.claude/rules/` | 18 modular rule files imported via `@.claude/rules/*` from `CLAUDE.md` |
+| **Rules** | `.claude/rules/` | 22 modular rule files. Claude Code loads every one; `CLAUDE.md` supplies the trigger saying when each applies, not the import (AgDR-0115) |
 | **Agents** | `.claude/agents/` | 23 sub-agents — the department personas plus utility agents |
 | **Skills** | `.claude/skills/` | 66 slash commands |
 | **Settings** | `.claude/settings.json` | Wires hooks to `PreToolUse`, `PostToolUse`, and `SessionStart` events |

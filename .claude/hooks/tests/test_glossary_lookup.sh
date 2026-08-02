@@ -13,7 +13,7 @@
 #
 #   1. .claude/rules/glossary-lookup.md exists and carries the ApexYard
 #      footer.
-#   2. CLAUDE.md imports it via @.claude/rules/glossary-lookup.md.
+#   2. CLAUDE.md's trigger index names it, so a reader learns when it applies.
 #   3. CLAUDE.md's rules-count line reads >= 18 and names "glossary lookup".
 #   4. The rule points at the shared glossary asset it reads from
 #      (docs/onboarding/glossary.md), so it can't drift onto a stale path.
@@ -44,7 +44,7 @@ else
   die "rule file missing the ApexYard footer"
 fi
 
-# 2. CLAUDE.md imports the rule
+# 2. CLAUDE.md's trigger index names the rule.
 # The trigger index is the section between "### Quality Rules" and the next
 # "###" heading. Scoped deliberately: an unscoped grep also matches CLAUDE.md's
 # TEMPLATES table, so it would pass even after the trigger is deleted.

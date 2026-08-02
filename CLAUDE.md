@@ -55,7 +55,7 @@ Each role has a **persona name** — a short identifier used in conversation, PR
 
 ### Activation — roles are first-class participants, not reference docs
 
-Roles activate **on specific conditions**. The full trigger table lives in `@.claude/rules/role-triggers.md` (imported below). The short version:
+Roles activate **on specific conditions**. The full trigger table lives in [`.claude/rules/role-triggers.md`](.claude/rules/role-triggers.md), already loaded. The short version:
 
 - **Auto-activation** — certain signals fire a role automatically. Examples: ticket moves to `qa` label → QA Engineer; PR diff touches `**/auth/**` → Security Auditor; production incident → SRE; new PRD drafted → Product Manager.
 - **Prompted activation** — the user can explicitly activate any role: *"act as the QA Engineer for ticket #42"*, *"put on your Tech Lead hat"*, etc.

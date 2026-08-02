@@ -6,7 +6,7 @@
 # that the artifacts exist and are wired in, so the rule can't silently rot:
 #
 #   1. .claude/rules/reporting-style.md exists and carries the ApexYard footer.
-#   2. CLAUDE.md imports it via @.claude/rules/reporting-style.md.
+#   2. CLAUDE.md's trigger index names it, so a reader learns when it applies.
 #   3. CLAUDE.md's rules-count line is updated (13) and names "reporting style".
 #   4. The opt-in output style exists with valid name + description frontmatter.
 #
@@ -35,7 +35,7 @@ else
   die "rule file missing the ApexYard footer"
 fi
 
-# 2. CLAUDE.md imports the rule
+# 2. CLAUDE.md's trigger index names the rule.
 # The trigger index is the section between "### Quality Rules" and the next
 # "###" heading. Scoped deliberately: an unscoped grep also matches CLAUDE.md's
 # TEMPLATES table, so it would pass even after the trigger is deleted.
