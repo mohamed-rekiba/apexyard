@@ -47,7 +47,13 @@ Why the tracked location was wrong, stated plainly so nobody re-proposes it:
 
 - **It is not a personal setting there.** Every adopter of the fork would inherit standing permission for the agent to write to the trust chain with no per-edit prompt, having never seen this record.
 - **It is self-amplifying.** `Write(.claude/settings.json)` permits rewriting `permissions.allow` itself, so the grant contains the capability to redefine its own limits. `Write(.claude/hooks/**)` *creates* files, not only edits them — and `settings.json` already wires `SessionStart`, so create-a-script → wire-it → unprompted execution on the next session.
-- **The remaining controls were fewer than they looked.** An earlier draft of this section named three: the per-PR human merge approval, the merge gate's SHA-matched markers, and this security review. Only the first survives the grant. `block-unreviewed-merge.sh` lives *under* `.claude/hooks/**`, so a control the grant makes writable is not independent of it; and a review is periodic, not preventive. What actually holds is that `.claude/skills/**` is outside the globs, so `/approve-merge` stays `disable-model-invocation: true` — one control, not three.
+- **The remaining controls were fewer than they looked — and this record got that wrong twice.** The first draft named three: the per-PR human merge approval, the merge gate's SHA-matched markers, and this security review. The second draft cut it to one, keeping the human approval. Both were too generous, and the honest count is nearer **zero framework-internal controls**:
+  - The **merge gate** is `block-unreviewed-merge.sh`, under `.claude/hooks/**`. A control the grant makes writable is not independent of it.
+  - The **security review** is circular for the same reason: `detect-role-trigger.sh`, which auto-fires it, is inside the globs too. It is also periodic rather than preventive.
+  - The **human approval** is the subtlest. `disable-model-invocation: true` locks the *skill* — and `.claude/skills/**` is genuinely outside the globs — but the merge itself is a Bash command, gated by the hook above. Locking the front door while the grant covers the lock is not a control.
+  - Nothing server-side backs any of it: `main` on this fork has **no branch protection** (`gh api .../protection` → 404).
+
+  This strengthens the conclusion rather than weakening it, which is precisely why it belongs here. A decision record that overstates its own residual safety is the failure mode this framework has already had to correct once, in `right-size-ceremony.md`'s claim about a token meter it did not ship.
 
 The decisive argument is not the severity but the absence of any upside: the tracked location buys nothing the gitignored one doesn't. Both unblock identically. Only one propagates.
 
