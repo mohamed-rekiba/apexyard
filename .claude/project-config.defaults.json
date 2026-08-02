@@ -18,6 +18,8 @@
       "Idea"
     ],
     "label_priority_scheme": "P0,P1,P2,P3",
+    "_qa_label_comment": "Label applied to a ticket when its PR merges, marking the mandatory QA state (workflow-gates Gate 6). detect-role-trigger.sh watches for this label to auto-fire the QA Engineer. Set to \"\" to disable the post-merge QA transition entirely.",
+    "qa_label": "qa",
     "required_sections": {
       "Feature": ["User Story", "Acceptance Criteria"],
       "Chore": ["Driver", "Scope", "Acceptance Criteria"],

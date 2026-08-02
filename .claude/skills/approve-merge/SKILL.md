@@ -276,12 +276,77 @@ board_move_card "<pr>" "measurement"
 > and your board will reflect closed tickets automatically without any
 > additional hook wiring.
 
+### 8a. Move the ticket into QA state
+
+**Do NOT close the ticket here.** `workflow-gates.md` Gate 6 makes QA a mandatory stop: a merged PR moves the ticket to **QA**, not Done, and a QA Engineer closes it only after verifying the acceptance criteria. That is why PR bodies use `Refs #N` rather than `Closes #N` — `Closes` would let the host auto-close on merge and skip the gate entirely.
+
+What this step does is perform the transition the gate has always described but nothing ever executed: apply the QA label. `detect-role-trigger.sh` already watches for that label and auto-fires the QA Engineer, so applying it is what actually starts QA rather than leaving the ticket in limbo.
+
+**Steps 8a, 10, and 11 all run ONLY on a successful merge.** Guard every one of them on `MERGE_RC` from step 7. If a gate blocked the merge, the PR is still open — labelling its ticket QA would be a lie, and step 11 deleting the approval markers would contradict step 9's promise that "the marker is still valid, no need to re-approve."
+
+```bash
+if [ "${MERGE_RC:-1}" -eq 0 ]; then
+
+  # Read the label RAW, not via config_get_or. config_get_or substitutes its
+  # fallback for any empty value, which would make the documented `""` opt-out
+  # unexpressible — an adopter who opted out would get labelled anyway.
+  # config_get returns the literal "null" for an ABSENT key, which is the only
+  # case that should default.
+  source "$MARKER_HOME/.claude/hooks/_lib-read-config.sh"
+  QA_LABEL=$(config_get '.ticket.qa_label')
+  if [ "$QA_LABEL" = "null" ] || ! command -v jq >/dev/null 2>&1; then
+    QA_LABEL="qa"          # key absent, or no jq to read it → framework default
+  fi
+
+  if [ -n "$QA_LABEL" ]; then
+    # Resolve the ticket(s) this PR references. Bare `#N` only — a cross-repo
+    # `owner/repo#N` belongs to another tracker and is skipped.
+    TICKETS_FILE=$(mktemp)
+    gh pr view "<pr>" --repo "<owner/repo>" --json body,title \
+      -q '.title + "\n" + .body' 2>/dev/null \
+      | grep -oiE '\b(refs|closes|fixes|resolves)[[:space:]]+#[0-9]+' \
+      | grep -oE '[0-9]+' | sort -u > "$TICKETS_FILE"
+
+    # Print what was resolved; you issue the label calls in the next block.
+    echo "QA_LABEL=$QA_LABEL"; echo "TICKETS:"; cat "$TICKETS_FILE"
+  fi
+fi
+```
+
+Then, **for each ticket printed above, issue ONE call as a bare top-level statement with LITERAL values** — the repo, the ticket number, and the resolved label all written out, not passed as shell variables:
+
+```bash
+tracker_label_ensure "owner/repo" "qa" "0E8A16" "Merged — awaiting QA verification"
+tracker_label_add "owner/repo" "42" "qa"
+```
+
+**Why literals, and why top-level — this is not style.** `detect-role-trigger.sh` reads the **raw Bash command text** and, like every hook in this framework, never `eval`s it (see `_lib-extract-pr.sh`). So:
+
+- `tracker_label_add "<repo>" "$t" "$QA_LABEL"` gives the hook the seven characters `$QA_LABEL` as the label name. It matches nothing, the QA Engineer never fires, and the transition is silently inert — you have applied the label and started nothing.
+- Nesting the call inside `if`/`while` hides it from the harness matcher for the same reason step 7 documents at length for `tracker_pr_merge`: the matcher fires on the command text a Bash call actually submits.
+
+This is the identical failure mode as passing `"$PR_HOST_REPO"` to `tracker_pr_merge` — the gate reads the literal variable name and blocks. Resolve first, substitute the values, then call.
+
+If `tracker_label_add` returns non-zero, warn and continue — never fail the merge:
+
+```
+WARN: could not apply 'qa' to #42 — apply it manually to start QA.
+```
+
+`TICKETS_FILE` is consumed again by step 11, so remove it only after that step — not here.
+
+**This step must never fail the merge.** The merge has already happened and is irreversible; a labelling failure is a nuisance, not a reason to report failure. `tracker_label_add` returns non-zero only when an adapter ran and the host rejected it — warn and continue, exactly as `board_move_card` does. Same reasoning for a tracker kind with no adapter: nothing to do is not an error.
+
+Report which tickets moved to QA in step 9 so the operator knows what is now awaiting verification.
+
 ### 9. Report
 
 Single-line confirmation (include the merge strategy used so the operator can see it):
 
 ```
 ✓ Merged PR #<pr> as commit <MERGE_SHA> (strategy: squash). Branch deleted.
+  #<N> moved to QA — awaiting acceptance-criteria verification.
+  Local: on <default-branch>, up to date; branch and review markers cleared.
 ```
 
 or for sync PRs:
@@ -289,6 +354,11 @@ or for sync PRs:
 ```
 ✓ Merged PR #<pr> as commit <MERGE_SHA> (strategy: merge, auto-detected sync PR — ancestry preserved). Branch deleted.
 ```
+
+Name the tickets that moved to QA — the operator needs to know what is now
+awaiting verification, since the merge did **not** close them. If any step from
+8a / 10 / 11 warned, surface that in one line rather than silently swallowing
+it: the merge still succeeded, but the follow-up didn't fully land.
 
 If the merge gate blocked (`MERGE_RC` non-zero and not 3), surface the exact error and tell the user how to retry:
 
@@ -302,9 +372,108 @@ If `MERGE_RC` = 3 (`tracker.kind: none`, no host CLI configured):
 ✓ CEO approval recorded for PR #<pr>. No tracker CLI is configured (tracker.kind: none) — merge <pr> manually on the host; the marker on disk covers the approval, no further /approve-merge invocation needed.
 ```
 
-### 10. Optional: post-merge child-issue closure
+### 10. Sync the local working tree
 
-If the PR's merge commit / PR body contains `Closes <owner/repo>#<N>` references that GitHub's auto-closer didn't catch (squash merges with cross-repo refs sometimes silently miss), you can offer to close them with a comment. This is **out of scope for the default flow** — only do it if the user explicitly asks. Don't auto-close child issues; that's another externally-visible action that needs its own per-issue confirmation.
+`--delete-branch` deletes the **remote** branch. It does nothing locally, so without this step every merge leaves the operator checked out on a dead branch with a stale default branch — and the merged files absent from their working tree.
+
+**Use no bare `return` or `exit` anywhere in this step.** Both are wrong here, in opposite directions. `return` outside a function does *not* abort an executed script — it prints an error and **carries on to the next line**, so a guard written as `... || { warn; return 0; }` falls straight through into the very mutation it exists to prevent. And `exit 1` would abort the whole flow, breaking the never-fail-the-merge contract for a merge that already happened. Express every guard as an `if` block that simply *contains* the work.
+
+```bash
+if [ "${MERGE_RC:-1}" -eq 0 ] && cd "$MARKER_HOME" 2>/dev/null; then
+  # Never mutate a repo other than the intended one (isolated-builds.md).
+  # -ef compares inode identity, so a symlinked path (/tmp vs /private/tmp on
+  # macOS) doesn't route a legitimate repo into the "unexpected" branch.
+  if [ ! "$(git rev-parse --show-toplevel 2>/dev/null)" -ef "$MARKER_HOME" ]; then
+    echo "WARN: unexpected repo at $MARKER_HOME — skipping local cleanup." >&2
+  else
+    DEFAULT_BRANCH=$(gh repo view "<owner/repo>" --json defaultBranchRef -q .defaultBranchRef.name 2>/dev/null || echo main)
+    MERGED_BRANCH="$PR_HEAD_BRANCH"   # from step 6
+
+    git checkout "$DEFAULT_BRANCH" --quiet 2>/dev/null && \
+      git fetch origin --quiet 2>/dev/null && \
+      git merge --ff-only "origin/$DEFAULT_BRANCH" --quiet 2>/dev/null
+    git remote prune origin >/dev/null 2>&1
+
+    # Delete the local branch — but ONLY when its content already landed.
+    #
+    # `git branch -d` is the wrong guard: after a SQUASH merge (this skill's
+    # default) the branch's commits are not ancestors of the squashed commit,
+    # so -d refuses on essentially every merge this skill performs.
+    #
+    # Diff against the MERGE COMMIT, not the default branch. The merge commit is
+    # a fixed point; the default branch moves. Once any other PR lands, a diff
+    # against the branch tip reports that PR's changes and the guard would never
+    # fire again — failing safe, but never cleaning up either.
+    if [ -n "$MERGED_BRANCH" ] && git show-ref --verify --quiet "refs/heads/$MERGED_BRANCH"; then
+      # Test the EXIT CODE, never the emptiness of stdout.
+      #
+      # `git diff <unresolvable-sha> <branch> --stat` exits 128 and prints
+      # NOTHING. An `[ -z "$(...)" ]` guard reads that as "no differences" and
+      # deletes the branch — destroying unmerged work. The window is real: if
+      # `git checkout` succeeds but `git fetch` fails above, $MERGE_SHA is
+      # remote-only and unresolvable locally.
+      #
+      # `git diff --quiet` is unambiguous: 0 = identical, 1 = differs,
+      # >1 = error. Only 0 may delete.
+      if ! git cat-file -e "${MERGE_SHA}^{commit}" 2>/dev/null; then
+        echo "WARN: merge commit $MERGE_SHA not present locally — keeping '$MERGED_BRANCH'." >&2
+      else
+        git diff --quiet "$MERGE_SHA" "$MERGED_BRANCH" 2>/dev/null
+        DIFF_RC=$?
+        if [ "$DIFF_RC" -eq 0 ]; then
+          git branch -D "$MERGED_BRANCH" >/dev/null 2>&1
+        elif [ "$DIFF_RC" -eq 1 ]; then
+          echo "WARN: local '$MERGED_BRANCH' differs from the merge commit — kept it. Inspect before deleting." >&2
+        else
+          echo "WARN: could not compare '$MERGED_BRANCH' with $MERGE_SHA (git exited $DIFF_RC) — kept it." >&2
+        fi
+      fi
+    fi
+  fi
+fi
+```
+
+The `-D` is deliberate and is safe **only** because of the diff guard immediately above it. Never hoist the `-D` out from behind that check.
+
+### 11. Clear the merged PR's session state
+
+The approval markers and the active-ticket marker describe work that no longer exists. Leaving them accumulates stale state that `warn-stale-review-markers.sh` will later complain about.
+
+```bash
+if [ "${MERGE_RC:-1}" -eq 0 ]; then
+  rm -f "$(review_marker_path "<owner/repo>" "<pr>" rex "$MARKER_HOME")" \
+        "$(review_marker_path "<owner/repo>" "<pr>" ceo "$MARKER_HOME")"
+
+  # Only clear the active ticket if it is one this PR just moved to QA — the
+  # operator may be mid-flow on a different ticket.
+  #
+  # Compare whole values in a loop rather than building a regex alternation
+  # from the file. An alternation breaks three ways here: an EMPTY tickets file
+  # yields `#()$`, which matches a bare `#` and can clear an unrelated marker;
+  # ticket 4 would match inside ticket 42 without anchoring; and any regex
+  # metacharacter in the file would be interpreted rather than matched.
+  CT="$MARKER_HOME/.claude/session/current-ticket"
+  if [ -f "$CT" ] && [ -s "$TICKETS_FILE" ]; then
+    CT_NUM=$(grep -oE '#[0-9]+$' "$CT" 2>/dev/null | tr -d '#')
+    if [ -n "$CT_NUM" ]; then
+      while IFS= read -r t; do
+        [ -n "$t" ] || continue
+        if [ "$t" = "$CT_NUM" ]; then rm -f "$CT"; break; fi
+      done < "$TICKETS_FILE"
+    fi
+  fi
+
+  rm -f "$TICKETS_FILE"     # created in step 8a, consumed by both steps
+fi
+```
+
+Like steps 8a and 10, this is best-effort and never fails the merge report.
+
+### 12. Optional: post-merge child-issue closure
+
+If the PR's merge commit / PR body contains `Closes <owner/repo>#<N>` references that the host's auto-closer didn't catch (squash merges with cross-repo refs sometimes silently miss), you can offer to close them with a comment. This is **out of scope for the default flow** — only do it if the user explicitly asks. Don't auto-close child issues; that's another externally-visible action that needs its own per-issue confirmation.
+
+Note this is distinct from step 8a: that one moves a ticket *into* QA, which is the framework's intended post-merge state. Closing a ticket outright bypasses Gate 6 and stays opt-in.
 
 ## --no-merge opt-out
 
