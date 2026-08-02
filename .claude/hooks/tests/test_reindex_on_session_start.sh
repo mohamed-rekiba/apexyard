@@ -89,7 +89,17 @@ test_no_cli_is_silent_noop() {
   sb=$(mktemp -d)
   build_sandbox "$sb"
 
-  out=$(cd "$sb" && bash "$HOOK" 2>&1)
+  # PATH must EXCLUDE the host's own directories, not merely prepend the
+  # sandbox. This case asserts behaviour when apexyard-search is absent, and a
+  # developer who actually installed it (~/.local/bin) has it on $PATH — so
+  # inheriting $PATH voids the case's premise: `command -v apexyard-search`
+  # succeeds, the reachability probe then fails against the empty sandbox, and
+  # the hook prints its honest-unreachable line. That read as a bug in the hook.
+  # CI passed only because nothing there had the CLI installed.
+  #
+  # Note this is deliberately NOT `run_hook_in`: that helper prepends
+  # "$sb/bin:$PATH", which keeps the host on the path and would leak here too.
+  out=$(cd "$sb" && env PATH="$sb/bin:/usr/bin:/bin" bash "$HOOK" 2>&1)
   rc=$?
 
   if [ -z "$out" ] && [ "$rc" -eq 0 ]; then

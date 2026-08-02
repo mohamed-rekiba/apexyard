@@ -14,23 +14,64 @@
 
 set -u
 
-HOOK="$(cd "$(dirname "$0")/.." && pwd)/suggest-mcp-search.sh"
+HOOKS_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 PASS=0
 FAIL=0
 
 # --- Fixtures: a portfolio root WITH apexyard-search, and one WITHOUT --------
+#
+# Each fixture is a fork-shaped sandbox holding its OWN copy of the hook, not
+# just a .mcp.json. That is not tidiness — it is the only way to control which
+# .mcp.json the hook reads:
+#
+#   ops_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+#
+# The install-gate resolves the ops fork from the hook script's own location and
+# checks "$ops_root/.mcp.json" BEFORE $APEXYARD_PORTFOLIO_ROOT. Running the
+# repo's own copy therefore reads the repo's real .mcp.json no matter what the
+# environment or working directory says — no variable can redirect it. A
+# developer with apexyard-search actually configured saw all five gate-closed
+# cases fail; CI passed only because .mcp.json is untracked and absent there, so
+# the gate-closed path was never truly exercised. Copying the hook into the
+# sandbox moves the BASH_SOURCE anchor with it.
+copy_hook_into() {
+  local dir="$1"
+  mkdir -p "$dir/.claude/hooks"
+  cp "$HOOKS_DIR/suggest-mcp-search.sh" "$dir/.claude/hooks/"
+  # Copy the whole _lib-* set, not just the one the hook sources directly.
+  # Every lib self-locates via its own BASH_SOURCE and sources its siblings the
+  # same way, so a partial copy breaks the chain *silently*: with
+  # _lib-read-config.sh present but _lib-ops-root.sh missing, config resolution
+  # falls back to `git rev-parse` in a non-repo temp dir, finds nothing, and
+  # every setting quietly takes its default — which read here as gate_mode=false
+  # and turned a soft-block assertion into a pass-by-accident. Copying the set
+  # keeps the sandbox faithful and survives a future lib dependency being added.
+  cp "$HOOKS_DIR"/_lib-*.sh "$dir/.claude/hooks/" 2>/dev/null
+  return 0
+}
+
+# sandbox_hook <root> → the path to run, so every call site stays consistent.
+sandbox_hook() { printf '%s/.claude/hooks/suggest-mcp-search.sh' "$1"; }
+
+make_root() {
+  local dir="$1" mcp="$2"
+  copy_hook_into "$dir"
+  printf '%s' "$mcp" > "$dir/.mcp.json"
+}
+
 MCP_DIR=$(mktemp -d)
-printf '%s' '{"mcpServers":{"apexyard-search":{"command":"apexyard-search"}}}' > "$MCP_DIR/.mcp.json"
+make_root "$MCP_DIR" '{"mcpServers":{"apexyard-search":{"command":"apexyard-search"}}}'
 
 NO_MCP_DIR=$(mktemp -d)
-printf '%s' '{"mcpServers":{"some-other-server":{}}}' > "$NO_MCP_DIR/.mcp.json"
+make_root "$NO_MCP_DIR" '{"mcpServers":{"some-other-server":{}}}'
 
 cleanup() { rm -rf "$MCP_DIR" "$NO_MCP_DIR"; }
 trap cleanup EXIT
 
-# run_hook <input-json> <portfolio_root>  → prints the hook's stdout
+# run_hook <input-json> <portfolio_root>  → prints the hook's stdout.
+# Runs the sandbox's own copy so the install-gate resolves inside the sandbox.
 run_hook() {
-  echo "$1" | APEXYARD_PORTFOLIO_ROOT="$2" bash "$HOOK"
+  echo "$1" | APEXYARD_PORTFOLIO_ROOT="$2" bash "$2/.claude/hooks/suggest-mcp-search.sh"
 }
 
 # assert the hook emitted a well-formed additionalContext advisory on stdout
@@ -165,6 +206,7 @@ mkdir -p "$GATE_ROOT/.claude"
 printf '%s' '{"mcp_search":{"gate_mode":false}}' > "$GATE_ROOT/.claude/project-config.defaults.json"
 printf '%s' '{"mcp_search":{"gate_mode":true}}' > "$GATE_ROOT/.claude/project-config.json"
 printf '%s' '{"mcpServers":{"apexyard-search":{"command":"apexyard-search"}}}' > "$GATE_ROOT/.mcp.json"
+copy_hook_into "$GATE_ROOT"
 cleanup_gate() { rm -rf "$GATE_ROOT"; }
 trap 'cleanup; cleanup_gate' EXIT
 
@@ -175,7 +217,7 @@ trap 'cleanup; cleanup_gate' EXIT
 gate_exit() {
   local input="$1" extra="${2:-}"
   ( cd "$GATE_ROOT" && echo "$input" | \
-      env APEXYARD_OPS_DISABLE_PIN=1 APEXYARD_PORTFOLIO_ROOT="$GATE_ROOT" $extra bash "$HOOK" >/dev/null 2>&1 )
+      env APEXYARD_OPS_DISABLE_PIN=1 APEXYARD_PORTFOLIO_ROOT="$GATE_ROOT" $extra bash "$(sandbox_hook "$GATE_ROOT")" >/dev/null 2>&1 )
   echo $?
 }
 
@@ -204,7 +246,8 @@ touch "$NOGATE_ROOT/.apexyard-fork"; mkdir -p "$NOGATE_ROOT/.claude"
 printf '%s' '{"mcp_search":{"gate_mode":false}}' > "$NOGATE_ROOT/.claude/project-config.defaults.json"
 printf '%s' '{"mcp_search":{"gate_mode":true}}' > "$NOGATE_ROOT/.claude/project-config.json"
 printf '%s' '{"mcpServers":{"other":{}}}' > "$NOGATE_ROOT/.mcp.json"
-nogate_exit=$( cd "$NOGATE_ROOT" && echo "$SEARCH_CMD" | env APEXYARD_OPS_DISABLE_PIN=1 APEXYARD_PORTFOLIO_ROOT="$NOGATE_ROOT" bash "$HOOK" >/dev/null 2>&1; echo $? )
+copy_hook_into "$NOGATE_ROOT"
+nogate_exit=$( cd "$NOGATE_ROOT" && echo "$SEARCH_CMD" | env APEXYARD_OPS_DISABLE_PIN=1 APEXYARD_PORTFOLIO_ROOT="$NOGATE_ROOT" bash "$(sandbox_hook "$NOGATE_ROOT")" >/dev/null 2>&1; echo $? )
 assert_exit "gate ON but no apexyard-search → install-gate silent (exit 0)" 0 "$nogate_exit"
 rm -rf "$NOGATE_ROOT"
 
@@ -214,7 +257,8 @@ touch "$GATEOFF_ROOT/.apexyard-fork"; mkdir -p "$GATEOFF_ROOT/.claude"
 printf '%s' '{"mcp_search":{"gate_mode":false}}' > "$GATEOFF_ROOT/.claude/project-config.defaults.json"
 printf '%s' '{"mcp_search":{"gate_mode":false}}' > "$GATEOFF_ROOT/.claude/project-config.json"
 printf '%s' '{"mcpServers":{"apexyard-search":{"command":"apexyard-search"}}}' > "$GATEOFF_ROOT/.mcp.json"
-gateoff_exit=$( cd "$GATEOFF_ROOT" && echo "$SEARCH_CMD" | env APEXYARD_OPS_DISABLE_PIN=1 APEXYARD_PORTFOLIO_ROOT="$GATEOFF_ROOT" bash "$HOOK" >/dev/null 2>&1; echo $? )
+copy_hook_into "$GATEOFF_ROOT"
+gateoff_exit=$( cd "$GATEOFF_ROOT" && echo "$SEARCH_CMD" | env APEXYARD_OPS_DISABLE_PIN=1 APEXYARD_PORTFOLIO_ROOT="$GATEOFF_ROOT" bash "$(sandbox_hook "$GATEOFF_ROOT")" >/dev/null 2>&1; echo $? )
 assert_exit "gate OFF (default) → advisory, never blocks (exit 0)" 0 "$gateoff_exit"
 rm -rf "$GATEOFF_ROOT"
 

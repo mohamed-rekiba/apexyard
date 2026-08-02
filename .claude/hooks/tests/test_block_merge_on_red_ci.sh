@@ -308,6 +308,34 @@ echo "WRONG: gh should not be called for a glab-registered project" >&2
 exit 1
 EOF
   chmod +x "$sb/bin/gh"
+  # A minimal `yq` so the registry lookup works on any machine.
+  #
+  # `_tracker_project_value` reads the registry with `yq`, falling back to
+  # python3+PyYAML, and returns 1 if neither is available. On a host with
+  # neither, `tracker_kind "g/p"` silently degrades to the GLOBAL default —
+  # `"kind": "gh"` above — so the hook consults gh, the deliberately-loud gh
+  # mock fires, and these two cases fail for a reason that has nothing to do
+  # with what they test. macOS ships neither; Ubuntu's python3 has PyYAML,
+  # which is the only reason CI stayed green.
+  #
+  # The stub VERIFIES THE QUERY rather than answering unconditionally: it
+  # matches on $REPO and the requested `.tracker.<key>` path, so a hook that
+  # asked about the wrong repo — or stopped consulting the registry at all —
+  # still fails. Answering `glab` blindly would make the case tautological.
+  cat > "$sb/bin/yq" <<'EOF'
+#!/bin/bash
+# usage as called: REPO=<repo> yq eval "<expr>" <registry>
+expr=""
+for a in "$@"; do case "$a" in *"select(.repo"*) expr="$a" ;; esac; done
+[ -n "$expr" ] || exit 0
+case "$expr" in *"strenv(REPO)"*) ;; *) exit 0 ;; esac
+[ "${REPO:-}" = "g/p" ] || exit 0
+case "$expr" in
+  *".tracker.kind"*) echo "glab" ;;
+  *) echo "" ;;
+esac
+EOF
+  chmod +x "$sb/bin/yq"
   echo "$sb"
 }
 
