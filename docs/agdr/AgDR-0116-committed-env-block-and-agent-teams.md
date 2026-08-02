@@ -17,7 +17,14 @@ That review verified the `hooks` object is **byte-identical** between base and H
 
 **The finding is not either key. It is the precedent of a committed `env` block**, because `env` exports into every shell the harness spawns, hook processes included, and the framework's enforcement reads its behaviour from the environment:
 
-- **No hook pins an absolute binary path.** `gh` is PATH-resolved in 23 hook files, `jq` in 42, `git` in 39. A single `PATH` entry here substitutes every forge query and SHA comparison the merge gates depend on.
+- **No hook pins an absolute binary path.** Verified across all 67 non-test scripts in `.claude/hooks/`: zero matches for `/usr/bin/gh`, `/usr/bin/jq`, `/usr/bin/git` or any absolute form. Every invocation is PATH-resolved, so a single `PATH` entry here substitutes every forge query and SHA comparison the merge gates depend on.
+
+  *No per-binary count is given deliberately.* Three careful attempts produced three different answers for `gh` (16, 19, and a ceiling of 18) and for `git` (39, 50, 53), because the figure depends on the denominator — all 67 scripts, or the 49 wired into `settings.json` — and on whether comment lines count. An earlier draft of this record cited 23 / 42 / 39, of which two were wrong in *opposite* directions. The structural claim is what the decision rests on, it is unambiguous, and it reproduces:
+
+  ```bash
+  grep -rlE '/(usr/)?(local/)?bin/(gh|jq|git)[[:space:]]' .claude/hooks/*.sh   # → no matches
+  ```
+
 - **`APEXYARD_OPS_PIN_DIR`** would misdirect `MARKER_HOME` for all three marker-reading merge gates. The pin validates only against a presence-only, forgeable `.apexyard-fork` anchor.
 - **`APEXYARD_ALLOW_*`** variables disable blocking gates with a stderr warning and nothing else.
 - **No hook inspects `settings.json` content.** The trigger that summoned the review is a *role activation*, not a mechanical check. A human noticing the diff is the only control.
@@ -47,7 +54,7 @@ Agent teams is enabled deliberately. It was exercised while producing this chang
 - **`env` is now a reviewed surface.** Any future change to it in `.claude/settings.json` is trust chain and takes the Heavy path per [`right-size-ceremony.md`](../../.claude/rules/right-size-ceremony.md) rail 1, no matter how small the diff. A one-line `env` addition is exactly where the chain is wanted.
 - **The gap is documented, not closed.** Nothing mechanically prevents a later `PATH` entry from substituting `gh` for every merge gate. Anyone relying on those gates should know that.
 - **Two follow-ups are deferred with their reasons**: a `settings.json` content inspector (blocked on the bootstrap problem — it cannot validate the file it lives in), and absolute-path pinning for `gh` / `jq` / `git` (blocked on portability).
-- **One unverified risk is written down rather than guessed at**: whether teammate sessions with distinct `CLAUDE_CODE_SESSION_ID`s bypass `pin-ops-root.sh` and fall back to walk-up ops-root resolution. Cheap to check; not yet checked.
+- **One half-verified risk is written down rather than guessed at.** The code path is confirmed: `pin-ops-root.sh` keys its pin to `CLAUDE_CODE_SESSION_ID`, and a session without that pin falls back to walk-up ops-root resolution — the marker-misplacement failure the pin exists to prevent. What remains genuinely open is harness behaviour: whether teammates receive distinct session IDs, and whether they run `SessionStart` at all. Cheap to check; not yet checked.
 - **Whether the harness fails open or closed on a malformed `settings.json` is unknown.** Determining it meant corrupting the file, which the review declined to do. The structural point stands either way: the file cannot validate itself.
 - **`model: "opus[1m]"` is purely operational** — no security consequence, stated so it is not mistaken for one.
 

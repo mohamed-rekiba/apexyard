@@ -47,7 +47,7 @@ trigger_index() {
 
 # 2. CLAUDE.md names the rule so a reader knows when it applies.
 # Not an `@` import: every .claude/rules/*.md file loads regardless of whether
-# CLAUDE.md named it, so the import proved availability that was never in
+# CLAUDE.md `@`-imported it, so the import proved availability that was never in
 # doubt. The trigger is the part that can actually go missing.
 if trigger_index | grep -q 'isolated-builds'; then
   pass "CLAUDE.md's trigger index names isolated-builds"
