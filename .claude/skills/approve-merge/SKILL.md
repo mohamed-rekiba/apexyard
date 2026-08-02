@@ -276,12 +276,50 @@ board_move_card "<pr>" "measurement"
 > and your board will reflect closed tickets automatically without any
 > additional hook wiring.
 
+### 8a. Move the ticket into QA state
+
+**Do NOT close the ticket here.** `workflow-gates.md` Gate 6 makes QA a mandatory stop: a merged PR moves the ticket to **QA**, not Done, and a QA Engineer closes it only after verifying the acceptance criteria. That is why PR bodies use `Refs #N` rather than `Closes #N` — `Closes` would let the host auto-close on merge and skip the gate entirely.
+
+What this step does is perform the transition the gate has always described but nothing ever executed: apply the QA label. `detect-role-trigger.sh` already watches for that label and auto-fires the QA Engineer, so applying it is what actually starts QA rather than leaving the ticket in limbo.
+
+```bash
+# The label is configurable. An adopter who sets it to "" opts out of the
+# transition entirely — respect that, don't substitute a default.
+source "$MARKER_HOME/.claude/hooks/_lib-read-config.sh"
+QA_LABEL=$(config_get_or '.ticket.qa_label' 'qa')
+
+if [ -n "$QA_LABEL" ]; then
+  # Resolve the ticket(s) this PR references. Prefer the PR body's Refs/Closes
+  # lines; fall back to the active-ticket marker. Bare `#N` only — a
+  # cross-repo `owner/repo#N` belongs to another tracker and is skipped.
+  gh pr view "<pr>" --repo "<owner/repo>" --json body,title \
+    -q '.title + "\n" + .body' 2>/dev/null \
+    | grep -oiE '\b(refs|closes|fixes|resolves)[[:space:]]+#[0-9]+' \
+    | grep -oE '[0-9]+' | sort -u > "$TICKETS_FILE"
+
+  # tracker_label_ensure creates the label when the repo lacks it (a fresh fork
+  # has none of the workflow labels); tracker_label_add then applies it.
+  while IFS= read -r t; do
+    [ -n "$t" ] || continue
+    tracker_label_ensure "<owner/repo>" "$QA_LABEL" "0E8A16" "Merged — awaiting QA verification"
+    tracker_label_add    "<owner/repo>" "$t" "$QA_LABEL" \
+      || echo "WARN: could not apply '$QA_LABEL' to #$t — apply it manually to start QA." >&2
+  done < "$TICKETS_FILE"
+fi
+```
+
+**This step must never fail the merge.** The merge has already happened and is irreversible; a labelling failure is a nuisance, not a reason to report failure. `tracker_label_add` returns non-zero only when an adapter ran and the host rejected it — warn and continue, exactly as `board_move_card` does. Same reasoning for a tracker kind with no adapter: nothing to do is not an error.
+
+Report which tickets moved to QA in step 9 so the operator knows what is now awaiting verification.
+
 ### 9. Report
 
 Single-line confirmation (include the merge strategy used so the operator can see it):
 
 ```
 ✓ Merged PR #<pr> as commit <MERGE_SHA> (strategy: squash). Branch deleted.
+  #<N> moved to QA — awaiting acceptance-criteria verification.
+  Local: on <default-branch>, up to date; branch and review markers cleared.
 ```
 
 or for sync PRs:
@@ -289,6 +327,11 @@ or for sync PRs:
 ```
 ✓ Merged PR #<pr> as commit <MERGE_SHA> (strategy: merge, auto-detected sync PR — ancestry preserved). Branch deleted.
 ```
+
+Name the tickets that moved to QA — the operator needs to know what is now
+awaiting verification, since the merge did **not** close them. If any step from
+8a / 10 / 11 warned, surface that in one line rather than silently swallowing
+it: the merge still succeeded, but the follow-up didn't fully land.
 
 If the merge gate blocked (`MERGE_RC` non-zero and not 3), surface the exact error and tell the user how to retry:
 
@@ -302,9 +345,63 @@ If `MERGE_RC` = 3 (`tracker.kind: none`, no host CLI configured):
 ✓ CEO approval recorded for PR #<pr>. No tracker CLI is configured (tracker.kind: none) — merge <pr> manually on the host; the marker on disk covers the approval, no further /approve-merge invocation needed.
 ```
 
-### 10. Optional: post-merge child-issue closure
+### 10. Sync the local working tree
 
-If the PR's merge commit / PR body contains `Closes <owner/repo>#<N>` references that GitHub's auto-closer didn't catch (squash merges with cross-repo refs sometimes silently miss), you can offer to close them with a comment. This is **out of scope for the default flow** — only do it if the user explicitly asks. Don't auto-close child issues; that's another externally-visible action that needs its own per-issue confirmation.
+`--delete-branch` deletes the **remote** branch. It does nothing locally, so without this step every merge leaves the operator checked out on a dead branch with a stale default branch — and the merged files absent from their working tree.
+
+```bash
+cd "$MARKER_HOME" || exit 1
+# Never mutate a repo other than the intended one (isolated-builds.md).
+[ "$(git rev-parse --show-toplevel)" = "$MARKER_HOME" ] || { echo "WARN: unexpected repo, skipping local cleanup." >&2; return 0; }
+
+DEFAULT_BRANCH=$(gh repo view "<owner/repo>" --json defaultBranchRef -q .defaultBranchRef.name 2>/dev/null || echo main)
+MERGED_BRANCH="$PR_HEAD_BRANCH"   # from step 6
+
+git checkout "$DEFAULT_BRANCH" --quiet && \
+  git fetch origin --quiet && \
+  git merge --ff-only "origin/$DEFAULT_BRANCH" --quiet
+git remote prune origin >/dev/null 2>&1
+
+# Delete the local branch — but ONLY when its content is already on the default
+# branch. `git branch -d` is the wrong guard here: after a SQUASH merge (this
+# skill's default strategy) the branch's commits are not ancestors of the
+# squashed commit, so -d refuses on essentially every merge this skill performs.
+# An empty content diff is the property we actually care about — nothing would
+# be lost — and it holds for squash, rebase, and plain merges alike.
+if [ -n "$MERGED_BRANCH" ] && git show-ref --verify --quiet "refs/heads/$MERGED_BRANCH"; then
+  if [ -z "$(git diff "$DEFAULT_BRANCH" "$MERGED_BRANCH" --stat)" ]; then
+    git branch -D "$MERGED_BRANCH" >/dev/null 2>&1
+  else
+    echo "WARN: local '$MERGED_BRANCH' still differs from $DEFAULT_BRANCH — kept it. Inspect before deleting." >&2
+  fi
+fi
+```
+
+The `-D` is deliberate and is safe **only** because of the diff guard immediately above it. Never hoist the `-D` out from behind that check.
+
+### 11. Clear the merged PR's session state
+
+The approval markers and the active-ticket marker describe work that no longer exists. Leaving them accumulates stale state that `warn-stale-review-markers.sh` will later complain about.
+
+```bash
+rm -f "$(review_marker_path "<owner/repo>" "<pr>" rex "$MARKER_HOME")" \
+      "$(review_marker_path "<owner/repo>" "<pr>" ceo "$MARKER_HOME")"
+
+# Only clear the active ticket if it is one this PR just moved to QA — an
+# operator may be mid-flow on a different ticket.
+CT="$MARKER_HOME/.claude/session/current-ticket"
+if [ -f "$CT" ] && grep -qE "#($(paste -sd'|' - < "$TICKETS_FILE"))$" "$CT" 2>/dev/null; then
+  rm -f "$CT"
+fi
+```
+
+Like steps 8a and 10, this is best-effort and never fails the merge report.
+
+### 12. Optional: post-merge child-issue closure
+
+If the PR's merge commit / PR body contains `Closes <owner/repo>#<N>` references that the host's auto-closer didn't catch (squash merges with cross-repo refs sometimes silently miss), you can offer to close them with a comment. This is **out of scope for the default flow** — only do it if the user explicitly asks. Don't auto-close child issues; that's another externally-visible action that needs its own per-issue confirmation.
+
+Note this is distinct from step 8a: that one moves a ticket *into* QA, which is the framework's intended post-merge state. Closing a ticket outright bypasses Gate 6 and stays opt-in.
 
 ## --no-merge opt-out
 

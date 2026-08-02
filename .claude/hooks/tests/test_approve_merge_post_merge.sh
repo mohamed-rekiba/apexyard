@@ -1,0 +1,180 @@
+#!/bin/bash
+# Tests for the post-merge steps of /approve-merge (mohamed-rekiba/apexyard#3).
+#
+# Two halves:
+#
+#   1. BEHAVIOURAL — tracker_label_add is real shell, so exercise it: dispatch
+#      per tracker kind, the never-abort contract, and the add-only boundary.
+#   2. STRUCTURAL — steps 8a/10/11 are skill prose an agent follows, not code,
+#      so the most that can be pinned is that the load-bearing instructions are
+#      present and haven't silently rotted. Same shape as the other skill tests.
+#
+# The load-bearing safety properties, which must not regress:
+#   - tracker_label_add can ONLY add a label (never close/reopen/comment/assign)
+#   - it never aborts its caller on missing args or an unknown tracker kind
+#   - the local branch delete stays behind an empty-content-diff guard, because
+#     `git branch -d` refuses after a squash merge (this skill's default)
+#   - step 8a labels rather than closes, preserving the mandatory QA gate
+
+set -u
+
+SRC_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
+SKILL="$SRC_ROOT/.claude/skills/approve-merge/SKILL.md"
+LIB="$SRC_ROOT/.claude/hooks/_lib-tracker.sh"
+DEFAULTS="$SRC_ROOT/.claude/project-config.defaults.json"
+
+fail=0
+pass() { echo "PASS: $1"; }
+die()  { echo "FAIL: $1" >&2; fail=1; }
+
+# ---------------------------------------------------------------- behavioural
+
+# Stub the forge CLIs so nothing touches a real host. Each records its argv.
+STUB_DIR="$(mktemp -d)"
+trap 'rm -rf "$STUB_DIR"' EXIT
+for cli in gh glab; do
+  cat > "$STUB_DIR/$cli" <<STUB
+#!/bin/bash
+echo "\$@" >> "$STUB_DIR/${cli}.argv"
+exit \${STUB_EXIT:-0}
+STUB
+  chmod +x "$STUB_DIR/$cli"
+done
+PATH="$STUB_DIR:$PATH"
+
+# shellcheck source=/dev/null
+. "$LIB" 2>/dev/null
+
+if ! command -v tracker_label_add >/dev/null 2>&1 && ! type tracker_label_add >/dev/null 2>&1; then
+  die "tracker_label_add is not defined in _lib-tracker.sh"
+else
+  pass "tracker_label_add is defined"
+fi
+
+# Force a known tracker kind without needing a registry: override tracker_kind.
+tracker_kind() { echo "${FAKE_KIND:-gh}"; }
+
+# 1. gh dispatch produces an add-label call, and nothing more dangerous.
+: > "$STUB_DIR/gh.argv"
+FAKE_KIND=gh tracker_label_add "o/r" "42" "qa"
+if grep -q -- "--add-label qa" "$STUB_DIR/gh.argv" 2>/dev/null; then
+  pass "gh adapter applies the label"
+else
+  die "gh adapter did not emit --add-label (got: $(cat "$STUB_DIR/gh.argv" 2>/dev/null))"
+fi
+if grep -qE "issue (close|reopen|comment)|--add-assignee" "$STUB_DIR/gh.argv" 2>/dev/null; then
+  die "gh adapter performed an action beyond adding a label"
+else
+  pass "gh adapter is add-only (no close/reopen/comment/assign)"
+fi
+
+# 2. glab dispatch.
+: > "$STUB_DIR/glab.argv"
+FAKE_KIND=glab tracker_label_add "o/r" "42" "qa"
+if grep -q -- "--label qa" "$STUB_DIR/glab.argv" 2>/dev/null; then
+  pass "glab adapter applies the label"
+else
+  die "glab adapter did not emit --label (got: $(cat "$STUB_DIR/glab.argv" 2>/dev/null))"
+fi
+
+# 3. Unknown kind is a silent no-op that still returns success.
+: > "$STUB_DIR/gh.argv"; : > "$STUB_DIR/glab.argv"
+if FAKE_KIND=jira tracker_label_add "o/r" "42" "qa"; then
+  pass "unknown tracker kind returns 0 (no-op)"
+else
+  die "unknown tracker kind returned non-zero — would abort the caller"
+fi
+if [ -s "$STUB_DIR/gh.argv" ] || [ -s "$STUB_DIR/glab.argv" ]; then
+  die "unknown tracker kind still invoked a forge CLI"
+else
+  pass "unknown tracker kind invoked no CLI"
+fi
+
+# 4. Missing args never abort the caller.
+for args in '"" "42" "qa"' '"o/r" "" "qa"' '"o/r" "42" ""'; do
+  if eval "tracker_label_add $args" >/dev/null 2>&1; then
+    pass "missing-arg form ($args) returns 0"
+  else
+    die "missing-arg form ($args) returned non-zero — would abort the caller"
+  fi
+done
+
+# 5. A host rejection surfaces as non-zero so the caller can warn — but the
+#    caller is documented to continue. Verify the signal exists.
+: > "$STUB_DIR/gh.argv"
+if STUB_EXIT=1 FAKE_KIND=gh tracker_label_add "o/r" "42" "qa" >/dev/null 2>&1; then
+  die "host rejection was swallowed — caller cannot warn"
+else
+  pass "host rejection returns non-zero (caller warns, does not abort)"
+fi
+
+# ------------------------------------------------------------------ structural
+
+[ -f "$SKILL" ] || die "approve-merge SKILL.md missing"
+
+# Step 8a labels; it must NOT close. Closing would bypass Gate 6.
+if grep -q "### 8a\." "$SKILL"; then
+  pass "skill has step 8a (QA transition)"
+else
+  die "skill lost step 8a — the QA transition is unperformed again"
+fi
+if grep -q "Do NOT close the ticket here" "$SKILL"; then
+  pass "step 8a explicitly forbids closing (Gate 6 preserved)"
+else
+  die "step 8a no longer forbids closing — QA gate at risk"
+fi
+if grep -q "tracker_label_add" "$SKILL"; then
+  pass "step 8a uses the forge-agnostic helper"
+else
+  die "step 8a no longer calls tracker_label_add (hardcoded CLI?)"
+fi
+
+# The branch delete must stay behind the content-diff guard. `git branch -d`
+# alone would refuse after a squash merge; a bare `-D` would be unsafe.
+if grep -q 'git diff "\$DEFAULT_BRANCH" "\$MERGED_BRANCH" --stat' "$SKILL"; then
+  pass "branch delete is guarded by an empty content diff"
+else
+  die "content-diff guard missing — branch delete is unsafe or will always fail"
+fi
+if grep -q "Never hoist the \`-D\` out from behind that check" "$SKILL"; then
+  pass "the -D guard rationale is recorded"
+else
+  die "lost the note explaining why -D is safe only behind the diff guard"
+fi
+
+for needle in "### 10. Sync the local working tree" "### 11. Clear the merged PR's session state"; do
+  if grep -qF "$needle" "$SKILL"; then
+    pass "skill has: $needle"
+  else
+    die "skill missing: $needle"
+  fi
+done
+
+# Every new step must be non-fatal to the merge.
+if grep -q "must never fail the merge" "$SKILL"; then
+  pass "step 8a states the never-fail-the-merge contract"
+else
+  die "step 8a lost the never-fail-the-merge contract"
+fi
+
+# Config key present and defaulted.
+if [ "$(jq -r '.ticket.qa_label // empty' "$DEFAULTS" 2>/dev/null)" = "qa" ]; then
+  pass "ticket.qa_label defaults to 'qa'"
+else
+  die "ticket.qa_label missing or not defaulted to 'qa' in project-config.defaults.json"
+fi
+
+# The label the skill applies must be the one detect-role-trigger.sh watches,
+# or the QA Engineer will never fire and this whole change is inert.
+if grep -q "add-label qa" "$SRC_ROOT/.claude/hooks/detect-role-trigger.sh" 2>/dev/null; then
+  pass "detect-role-trigger.sh still watches for the qa label"
+else
+  die "detect-role-trigger.sh no longer watches 'qa' — the transition would be inert"
+fi
+
+if [ "$fail" -eq 0 ]; then
+  echo "ALL PASS: approve-merge post-merge tests"
+else
+  echo "SOME TESTS FAILED" >&2
+fi
+exit "$fail"

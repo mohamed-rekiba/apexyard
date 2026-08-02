@@ -1094,6 +1094,60 @@ tracker_label_ensure() {
 }
 
 # ------------------------------------------------------------------------------
+# Apply an existing label to an issue (mohamed-rekiba/apexyard#3).
+#
+# Sibling of tracker_label_ensure, same contract: kind-dispatched, no-op for
+# kinds without an adapter, and NEVER aborts the caller. Callers pair the two —
+# `tracker_label_ensure` to create the label if the repo lacks it, then
+# `tracker_label_add` to apply it.
+#
+# DELIBERATELY ADD-ONLY. This function can attach a label and nothing else — it
+# cannot close, reopen, comment on, assign, or otherwise mutate an issue. That
+# narrowness is the point: its first caller is the post-merge QA transition in
+# /approve-merge, which runs immediately after a merge with no further human
+# confirmation, so the blast radius of a bug here has to stay small. If a future
+# caller needs to close a ticket, that belongs in its own reviewed function with
+# its own confirmation story, not as a parameter widening this one.
+#
+# Args are passed as an array, never an eval'd string, so a label containing
+# shell metacharacters is inert — same defence as every other adapter here.
+# ------------------------------------------------------------------------------
+
+_tracker_label_add_gh() {
+  local repo="$1" issue="$2" name="$3"
+  local -a args
+  args=(issue edit "$issue" --repo "$repo" --add-label "$name")
+  gh "${args[@]}" >/dev/null 2>&1 || return 1
+}
+
+_tracker_label_add_glab() {
+  local repo="$1" issue="$2" name="$3"
+  local -a args
+  args=(issue update "$issue" -R "$repo" --label "$name")
+  glab "${args[@]}" >/dev/null 2>&1 || return 1
+}
+
+# tracker_label_add <owner/repo> <issue> <label>
+#   → 0 when the label was applied, or when the tracker kind has no adapter
+#     (nothing to do is not a failure).
+#   → 1 only when an adapter ran and the host rejected it. Callers may report
+#     that, but MUST NOT treat it as fatal — see /approve-merge step 8a.
+tracker_label_add() {
+  local repo="$1" issue="${2:-}" name="${3:-}"
+  # Nothing actionable without all three — never abort the caller.
+  if [ -z "$repo" ] || [ -z "$issue" ] || [ -z "$name" ]; then
+    return 0
+  fi
+  local kind
+  kind=$(tracker_kind "$repo")
+  case "$kind" in
+    gh)   _tracker_label_add_gh   "$repo" "$issue" "$name" ;;
+    glab) _tracker_label_add_glab "$repo" "$issue" "$name" ;;
+    *)    return 0 ;;  # jira / linear / asana / custom / none — no-op
+  esac
+}
+
+# ------------------------------------------------------------------------------
 # PR/MR review submission (#758) — tracker/git-host-agnostic review posting.
 #
 # Mirrors tracker_create's shape: kind-dispatched adapters for gh + glab, a
