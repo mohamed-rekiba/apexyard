@@ -108,6 +108,8 @@ if [ "${1:-}" = "--changed" ]; then
     FILTERS+=("$stem")
   done <<< "$(printf '%s\n' "$changed" | sort -u)"
   if [ "${#FILTERS[@]}" -eq 0 ]; then
+    # Genuinely nothing changed — unlike a non-matching filter, this is a
+    # legitimate no-op rather than a likely typo, so it stays exit 0.
     echo "--changed: no changed files resolved; nothing to run."
     exit 0
   fi
@@ -126,8 +128,11 @@ if [ "${#FILTERS[@]}" -gt 0 ]; then
   # system bash on macOS) errors on "${arr[@]}" when arr is empty, so the
   # no-match path must exit before the assignment, not after it.
   if [ "${#SELECTED[@]}" -eq 0 ]; then
-    echo "No tests matched [${FILTERS[*]}]. Run bare to execute all $TOTAL_DISCOVERED."
-    exit 0
+    # Exit NON-ZERO. "Nothing matched" is not success: a typo'd filter in a
+    # script or CI step would otherwise report green having verified nothing —
+    # the same silent-pass failure mode this runner exists to prevent.
+    echo "No tests matched [${FILTERS[*]}]. Run bare to execute all $TOTAL_DISCOVERED." >&2
+    exit 2
   fi
   TESTS=("${SELECTED[@]}")
   echo "Scoped run: ${#TESTS[@]} of $TOTAL_DISCOVERED tests match [${FILTERS[*]}]"
