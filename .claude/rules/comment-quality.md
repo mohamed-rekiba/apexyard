@@ -35,6 +35,31 @@ The code already states what happens, and it is authoritative in a way a comment
 - **File headers state purpose, usage, and the non-obvious contract.** What this file is for, how it is invoked, what it guarantees, what it deliberately does not. Not a change log.
 - **Length is earned, not budgeted.** A twelve-line comment above four lines of code is correct when those four lines encode a decision that took an afternoon. A one-line comment above a hundred lines of obvious code is usually noise.
 
+## Sound like a colleague leaning over your shoulder
+
+A good comment reads like the sentence someone would actually say if they were sitting next to you when you hit this line. That is not a style preference — it is what makes the comment land in the two seconds a reader gives it.
+
+- **Say it the way you'd say it out loud.** "BSD sed quietly ignores `\b`, so this passes in CI and fails on a Mac" is what you'd tell someone. Write that.
+- **Name the reader's next move.** Most comments are read by someone about to change something. "Don't switch this to `-d` — after a squash merge the commits aren't ancestors and it refuses every time" tells them what not to do and why.
+- **Skip the throat-clearing.** No "NOTE:", no "IMPORTANT:", no "This function is responsible for". Start with the thing.
+- **Be blunt about cost.** "This is O(n²) but n is the number of hooks, so it's fine" is honest and closes the question. "Performance considerations may apply here" opens one and answers nothing.
+- **Write for someone tired.** The reader is mid-debug at the end of a long day. One clear sentence beats a precise paragraph.
+
+**Stiff:**
+
+```bash
+# NOTE: It is important to be aware that the following comparison
+# utilises inode identity in order to facilitate correct behaviour
+# in the presence of symbolic links.
+```
+
+**A person:**
+
+```bash
+# -ef compares inodes, so a symlinked path (/tmp vs /private/tmp on macOS)
+# doesn't get misread as a different repo.
+```
+
 ## Two rails (non-negotiable)
 
 1. **A comment describes current behaviour.** When you change the code under a comment, change the comment in the same edit — not in a follow-up, because there is no mechanism that will remind you. A stale comment is strictly worse than no comment: it is read as authoritative, it contradicts the code silently, and it survives review because reviewers read diffs and the comment is not in the diff.

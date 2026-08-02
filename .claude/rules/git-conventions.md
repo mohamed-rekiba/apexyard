@@ -69,6 +69,23 @@ Bullets are fine, and often right for a multi-part change. Each one still has to
 
 Skip the body when the subject genuinely says everything: a dependency bump, a typo fix, a rename with no behaviour change.
 
+### Write it like you're telling a teammate
+
+The body is a short explanation to a person, not a change record for a system. Write the sentences you would say if they asked "why did you do it this way?"
+
+- **Plain words.** "The hook was checking the wrong branch" beats "an incorrect reference resolution was identified in the validation logic".
+- **Active voice, real subject.** "I moved the check earlier because the fetch can fail" beats "the check was relocated due to potential fetch failure".
+- **Admit what you're unsure about.** "I'm not certain this covers the glab path — there's no coverage there" is more useful to the next person than false confidence, and it is the honest thing.
+- **No throat-clearing.** Don't open with "This commit…". They know.
+
+**Stiff:**
+
+> This commit implements a modification to the marker resolution logic in order to address an issue whereby the local working tree reference was being utilised in place of the remote reference.
+
+**A person:**
+
+> The gate was comparing against whatever branch happened to be checked out locally, which is almost never the PR branch. It now asks the forge for the PR's real HEAD.
+
 ### This is where history voice belongs
 
 A commit message is the one surface in the repository where narrating the past is correct:

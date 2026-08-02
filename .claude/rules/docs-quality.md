@@ -57,6 +57,34 @@ A quickstart that pauses to enumerate three configuration strategies has become 
 - **Name the reader's next step.** End a document knowing where the reader goes — the next guide, the reference for the flags, the skill that automates it.
 - **Show the thing, then explain it.** A command, a diagram, or an example first; the prose that interprets it second. A diagram with no explanatory sentence shows what the components are and never says why each one exists.
 
+## Write like a person, not like a policy
+
+Everything above is about *what* a document contains. This is about how it sounds — and it is the part readers actually feel. [`reporting-style.md`](reporting-style.md) says the same thing for status updates: *write like a colleague, not a machine printing a report.* A document is the same job, slower.
+
+The failure mode is not bad grammar. It is prose that has been drained of a person:
+
+- **Talk to the reader.** Say "you", say "we", use active voice. "The configuration must be updated by the operator" is a form. "Update `onboarding.yaml` before you run this" is a sentence.
+- **Short sentences, one idea each.** If you need three commas and a semicolon to hold a thought together, it is two thoughts.
+- **Contractions are fine.** "Don't" is not less rigorous than "do not". It is just less starched.
+- **Cut the ceremony.** *It should be noted that* → delete. *In order to* → *to*. *Utilize* → *use*. *Leverage* → *use*. *Facilitate* → what actually happens.
+- **Say the hard thing plainly.** "This will break every open PR" beats "this may have implications for in-flight work". Softening a real cost is not politeness; it is a reader finding out the expensive way.
+- **Don't stack qualifiers.** "Generally, in most cases, this should typically work" says nothing. Either it works, or say when it doesn't.
+- **Explain like you're at a whiteboard.** The sentence you would actually say out loud is nearly always the one to write down.
+
+The test is the same one `reporting-style.md` uses: **read it out loud.** If you would never say it that way to a colleague, don't write it that way for one.
+
+### Before and after
+
+**Policy voice:**
+
+> It should be noted that the aforementioned configuration key must be present in order for the enforcement mechanism to be operational. In the event that it is absent, the system will default to a permissive posture, which may have security implications.
+
+**A person:**
+
+> The gate only runs if `qa_label` is set. Leave it empty and nothing enforces the QA stop — merged code goes straight to done, unverified. That's a deliberate opt-out, not a bug, but know that you're choosing it.
+
+Same facts. The second one you can act on.
+
 ## Two honesty rails (non-negotiable)
 
 These are the rails because they are the two ways a document stops being merely unhelpful and becomes *wrong* — actively worse than no document at all.
