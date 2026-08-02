@@ -21,6 +21,20 @@ set -u
 SRC_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 cd "$SRC_ROOT" || { echo "FAIL: cannot cd to $SRC_ROOT" >&2; exit 1; }
 
+# Refuse to run unless SRC_ROOT really is the framework repo. The path is
+# derived from $0, so invoking a COPY of this script from elsewhere — say
+# /tmp/probe.sh — resolves SRC_ROOT to /, and the scan below then walks the
+# entire filesystem. That is not theoretical: it happened during review of this
+# PR and burned roughly 45 minutes before it gave up. Failing in a hundredth of
+# a second beats crawling a disk to reach the same answer.
+for required in .claude/hooks .claude/rules .claude/skills roles; do
+  if [ ! -d "$required" ]; then
+    echo "FAIL: $SRC_ROOT is not an apexyard checkout (no $required/)." >&2
+    echo "      Run this script from its place in the repo, not a copy." >&2
+    exit 1
+  fi
+done
+
 fail=0
 pass() { echo "PASS: $1"; }
 die()  { echo "FAIL: $1" >&2; fail=1; }
@@ -117,7 +131,10 @@ function not_an_inventory_claim(noun, before, after, prefix, line) {
   # the exemption for any noun leaves those totals silently unchecked.
   if (noun == "roles" && after == ":") return 1
   # Per-department subtotals in docs/whats-inside.md — "### Engineering (7 roles)".
-  # Correct as written, and they deliberately do not sum to the total.
+  # Each counts one department, so comparing it to the framework total is simply
+  # the wrong comparison. They do sum to 20; an earlier version of this comment
+  # claimed otherwise because "### Architecture (1 role)" is singular and the
+  # plural pattern never saw it.
   if (noun == "roles" && before == "(" && line ~ /^#/) return 1
   # /status prose about invoking sibling skills, not a count of the library.
   if (noun == "skills" && prefix ~ /instead of running $/) return 1
