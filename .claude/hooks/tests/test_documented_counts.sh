@@ -1,0 +1,222 @@
+#!/bin/bash
+# Guard documented framework counts against drift (mohamed-rekiba/apexyard#13).
+#
+# Docs state how many hooks, skills, rules, agents, and roles the framework
+# ships. Those numbers are right when written and wrong shortly after, and
+# nothing notices: a stale count reads exactly like a fresh one. When an agent
+# believes one, it writes a fourth copy of the same wrong claim, and the error
+# is only caught in review — three consecutive review blocks, in the case that
+# prompted this test.
+#
+# The count formulas below come verbatim from
+# docs/agdr/AgDR-0046-site-counts-drift-prevention.md, which built this guard
+# once for site/*.html. It was retired in #663 only because site/ moved to its
+# own repository, taking its assertion targets with it. The mechanism was never
+# faulted, so this re-applies it to the docs that stayed.
+#
+# Style matches the sibling tests: bash + grep, no framework.
+
+set -u
+
+SRC_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
+cd "$SRC_ROOT" || { echo "FAIL: cannot cd to $SRC_ROOT" >&2; exit 1; }
+
+# Refuse to run unless SRC_ROOT really is the framework repo. The path is
+# derived from $0, so invoking a COPY of this script from elsewhere — say
+# /tmp/probe.sh — resolves SRC_ROOT to /, and the scan below then walks the
+# entire filesystem. That is not theoretical: it happened during review of this
+# PR and burned roughly 45 minutes before it gave up. Failing in a hundredth of
+# a second beats crawling a disk to reach the same answer.
+for required in .claude/hooks .claude/rules .claude/skills roles; do
+  if [ ! -d "$required" ]; then
+    echo "FAIL: $SRC_ROOT is not an apexyard checkout (no $required/)." >&2
+    echo "      Run this script from its place in the repo, not a copy." >&2
+    exit 1
+  fi
+done
+
+fail=0
+pass() { echo "PASS: $1"; }
+die()  { echo "FAIL: $1" >&2; fail=1; }
+
+# ---------------------------------------------------------------------------
+# Ground truth
+# ---------------------------------------------------------------------------
+# AgDR-0046 writes the hook count as `ls .claude/hooks/*.sh | grep -v
+# "_lib\|/tests/"`. That exact form trips shellcheck's SC2010 at warning
+# severity, which is what CI enforces, so the loop below computes the same
+# thing: every `*.sh` directly in the hooks directory that is not a `_lib-*`
+# helper. The `/tests/` half of the original filter never did anything — the
+# glob does not recurse — so nothing is lost by dropping it.
+n_hooks=0
+for f in .claude/hooks/*.sh; do
+  case "${f##*/}" in _lib*) continue ;; esac
+  n_hooks=$((n_hooks + 1))
+done
+
+n_skills=$(find .claude/skills -name SKILL.md | wc -l | tr -d ' ')
+n_roles=$(find roles -name "*.md" -not -name "README*" -not -path "*/agdr/*" | wc -l | tr -d ' ')
+n_rules=$(find .claude/rules -maxdepth 1 -name '*.md' | wc -l | tr -d ' ')
+n_agents=$(find .claude/agents -maxdepth 1 -name '*.md' | wc -l | tr -d ' ')
+
+for pair in "hooks:$n_hooks" "skills:$n_skills" "roles:$n_roles" "rules:$n_rules" "agents:$n_agents"; do
+  if [ -z "${pair#*:}" ] || [ "${pair#*:}" -eq 0 ] 2>/dev/null; then
+    die "ground truth for ${pair%%:*} came back 0 — the formula is broken, not the docs"
+  fi
+done
+[ "$fail" -eq 0 ] && pass "ground truth: $n_hooks hooks, $n_skills skills, $n_rules rules, $n_agents agents, $n_roles roles"
+
+# ---------------------------------------------------------------------------
+# Which documents get checked
+# ---------------------------------------------------------------------------
+# Point-in-time records are excluded on purpose. A changelog entry, an AgDR, or
+# a spike memo states the count as of its own date; correcting it later would
+# falsify the record. `workspace/` holds managed-project clones — their docs
+# describe their own projects, not this framework.
+files=$(find . -name '*.md' \
+  -not -path './.git/*' \
+  -not -path './node_modules/*' \
+  -not -path './workspace/*' \
+  -not -path './docs/agdr/*' \
+  -not -path './docs/spikes/*' \
+  -not -path './docs/spike-memos/*' \
+  -not -path './.claude/session/*' \
+  -not -name 'CHANGELOG.md' \
+  | sort)
+
+[ -n "$files" ] || die "found no markdown to scan — the find filters are wrong"
+
+# ---------------------------------------------------------------------------
+# Scan
+# ---------------------------------------------------------------------------
+# Nouns are deliberately narrow. Bare "agents" and bare "rules" are excluded
+# because prose uses them constantly ("spawns ~10-20 agents", "3 of 5 agents"),
+# while every real inventory claim in this repo says "sub-agents" and
+# "rule files". Narrow patterns miss less than loose ones cost.
+#
+# Two shapes are skipped wherever they appear:
+#   - a range     — "10-20 agents", "3-5 roles"   (preceded by - – ~)
+#   - open-ended  — "40+ hooks"                    (number followed by +)
+
+# LC_ALL=C keeps awk byte-oriented. Without it, an en-dash in the prose ("~10-20
+# agents") aborts the record with a multibyte conversion error and the rest of
+# the input is silently skipped — a counts guard that quietly stops scanning is
+# worse than no guard, because it still reports PASS.
+violations=$(printf '%s\n' "$files" | tr '\n' '\0' | xargs -0 grep -nE \
+  '[0-9]+\+? (shell scripts|shell hooks|hooks|slash commands|skills|modular rule files|rule files|sub-agents|role definitions|role files|roles)([^a-z]|$)' \
+  2>/dev/null | LC_ALL=C awk -F: -v OFS=: \
+    -v t_hooks="$n_hooks" -v t_skills="$n_skills" -v t_rules="$n_rules" \
+    -v t_agents="$n_agents" -v t_roles="$n_roles" '
+function truth_for(noun) {
+  if (noun == "shell scripts"      || noun == "shell hooks" || noun == "hooks") return t_hooks
+  if (noun == "slash commands"     || noun == "skills")         return t_skills
+  if (noun == "modular rule files" || noun == "rule files")     return t_rules
+  if (noun == "sub-agents")                                     return t_agents
+  if (noun == "role definitions"   || noun == "role files" || noun == "roles") return t_roles
+  return -1
+}
+
+# Known-good matches that are not inventory claims. Every case needs a reason,
+# and every one is scoped to the individual match rather than the whole line —
+# discarding a line would hide any OTHER claim sharing it, which is exactly the
+# drift this test exists to catch.
+function not_an_inventory_claim(noun, before, after, prefix, line) {
+  # An enumerated subset — "13 roles: Heads-of-X, Tech Lead, …" — describes a
+  # partition, so the framework total is the wrong thing to compare it against.
+  # Whether the partition itself sums is a separate question this cannot answer.
+  #
+  # Restricted to "roles" deliberately. role-triggers.md is the only place that
+  # partitions a total this way; every other noun uses a colon to introduce a
+  # list of the whole set, as AGENTS.md:104 does with "23 sub-agents:". Allowing
+  # the exemption for any noun leaves those totals silently unchecked.
+  if (noun == "roles" && after == ":") return 1
+  # Per-department subtotals in docs/whats-inside.md — "### Engineering (7 roles)".
+  # Each counts one department, so comparing it to the framework total is simply
+  # the wrong comparison. They do sum to 20; an earlier version of this comment
+  # claimed otherwise because "### Architecture (1 role)" is singular and the
+  # plural pattern never saw it.
+  if (noun == "roles" && before == "(" && line ~ /^#/) return 1
+  # /status prose about invoking sibling skills, not a count of the library.
+  if (noun == "skills" && prefix ~ /instead of running $/) return 1
+  return 0
+}
+{
+  file = $1; lineno = $2
+  text = $0
+  sub(/^[^:]*:[^:]*:/, "", text)
+
+  rest = text
+  offset = 0
+  while (match(rest, /[0-9]+\+? (shell scripts|shell hooks|hooks|slash commands|skills|modular rule files|rule files|sub-agents|role definitions|role files|roles)/)) {
+    hit   = substr(rest, RSTART, RLENGTH)
+    start = offset + RSTART
+
+    # Character immediately before the number: a range or approximation marker
+    # means this is not an inventory claim. In C locale the leading byte of a
+    # multibyte dash (en/em) compares >= "\200", which is how "10-20 agents"
+    # written with a typographic dash is recognised as a range.
+    #
+    # Known limit of reading one byte: a real claim written with no space after
+    # a typographic dash ("Hooks—42 hooks") reads as a range and is missed. Every
+    # such claim in this tree has a space, and widening this would start
+    # swallowing genuine ranges, which is the costlier direction to be wrong in.
+    prev = (start > 1) ? substr(text, start - 1, 1) : ""
+
+    open_ended = (hit ~ /\+/)
+    ranged     = (prev == "-" || prev == "~" || prev >= "\200")
+
+    if (!open_ended && !ranged) {
+      n = hit; sub(/[^0-9].*$/, "", n)
+      noun = hit; sub(/^[0-9]+\+? /, "", noun)
+      want = truth_for(noun)
+      after  = substr(text, start + length(hit), 1)
+      prefix = substr(text, 1, start - 1)
+      if (want >= 0 && n + 0 != want + 0 &&
+          !not_an_inventory_claim(noun, prev, after, prefix, text))
+        print file ":" lineno "\t" n " " noun "\t(actual: " want ")\t" text
+    }
+
+    offset = offset + RSTART + RLENGTH - 1
+    rest = substr(rest, RSTART + RLENGTH)
+  }
+}')
+
+real_violations="$violations"
+
+if [ -n "$(printf '%s' "$real_violations" | tr -d '[:space:]')" ]; then
+  die "documented counts have drifted from the tree:"
+  # printf '%s\n', not '%s' — command substitution strips the trailing newline,
+  # and `read` discards a final unterminated line. With one violation that is
+  # every violation, leaving a failure that names nothing.
+  printf '%s\n' "$real_violations" | while IFS= read -r v; do
+    [ -n "$v" ] || continue
+    printf '        %s\n' "$v" >&2
+  done
+  echo "" >&2
+  echo "        Fix the document, or — if the number is genuinely not an" >&2
+  echo "        inventory claim — add a case to not_an_inventory_claim()" >&2
+  echo "        with a reason. Scope it to the match, never the line." >&2
+else
+  pass "every documented count matches the tree"
+fi
+
+# ---------------------------------------------------------------------------
+# The scan must actually be looking at something
+# ---------------------------------------------------------------------------
+# A regex typo or an over-broad exclusion would make this test pass by scanning
+# nothing at all, which is the failure mode a counts guard can least afford.
+sentinel=$(printf '%s\n' "$files" | tr '\n' '\0' | xargs -0 grep -clE \
+  '[0-9]+ (shell scripts|slash commands|rule files|sub-agents|roles)' 2>/dev/null | wc -l | tr -d ' ')
+if [ "$sentinel" -ge 3 ]; then
+  pass "scan reached $sentinel documents carrying count claims"
+else
+  die "only $sentinel documents matched any count pattern — the scan is not looking at the tree"
+fi
+
+echo ""
+if [ "$fail" -eq 0 ]; then
+  echo "=== test_documented_counts: all checks passed ==="
+else
+  echo "=== test_documented_counts: FAILED ===" >&2
+fi
+exit "$fail"

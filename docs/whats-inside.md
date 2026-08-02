@@ -158,9 +158,9 @@ This is what turns the markdown above into an enforced workflow. Claude Code pic
 | **Skills** | `.claude/skills/` | 66 slash commands |
 | **Settings** | `.claude/settings.json` | Wires hooks to `PreToolUse`, `PostToolUse`, and `SessionStart` events |
 
-### The 18 rule files
+### The 22 rule files
 
-`agdr-decisions`, `agent-role-selection`, `code-standards`, `git-conventions`, `glossary-lookup`, `isolated-builds`, `leak-protection`, `loop-mode`, `parallel-work`, `plan-mode`, `pr-quality`, `pr-workflow`, `reconcile-before-build`, `reporting-style`, `role-triggers`, `skill-first`, `ticket-vocabulary`, `workflow-gates`.
+`agdr-decisions`, `agent-role-selection`, `code-standards`, `comment-quality`, `docs-quality`, `git-conventions`, `glossary-lookup`, `isolated-builds`, `leak-protection`, `loop-mode`, `parallel-work`, `plan-mode`, `pr-quality`, `pr-workflow`, `readme-quality`, `reconcile-before-build`, `reporting-style`, `right-size-ceremony`, `role-triggers`, `skill-first`, `ticket-vocabulary`, `workflow-gates`.
 
 ### The 23 sub-agents
 

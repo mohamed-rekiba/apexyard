@@ -16,9 +16,9 @@ C4Container
         Container(claudemd, "CLAUDE.md", "Markdown", "Entry point. Claude Code reads this first. Imports rules and role-triggers.")
         Container(rules, ".claude/rules/", "Markdown", "Modular rule files — git conventions, ticket vocabulary, PR workflow, AgDR, PR quality, role triggers, workflow gates, code standards.")
         Container(hooks, ".claude/hooks/", "Shell scripts", "Mechanical enforcement — merge gates, ticket-first, secrets check, commit format, drift banner. Runs on PreToolUse / PostToolUse / SessionStart events.")
-        Container(skills, ".claude/skills/", "Markdown SKILL.md files", "Slash commands — /setup, /handover, /update, /status, /inbox, /approve-merge, /approve-design, /decide, /code-review, etc. (31 skills)")
+        Container(skills, ".claude/skills/", "Markdown SKILL.md files", "Slash commands — /setup, /handover, /update, /status, /inbox, /approve-merge, /approve-design, /decide, /code-review, etc. (66 skills)")
         Container(agents, ".claude/agents/", "Markdown agent defs", "Sub-agent definitions — code-reviewer (Rex), security-reviewer (Hakim), dependency-auditor (Munir), solution-architect (Tariq), contrarian (Naqid), plus the department-aligned role agents.")
-        Container(roles, "roles/", "Markdown role files", "19 role definitions across engineering / product / design / security / data. Activated by role-triggers.md matcher rules.")
+        Container(roles, "roles/", "Markdown role files", "20 role definitions across engineering / product / design / security / data. Activated by role-triggers.md matcher rules.")
         Container(workflows, "workflows/", "Markdown process docs", "SDLC, code review, deployment — the prose contract for how work moves.")
         Container(registry, "apexyard.projects.yaml", "YAML", "Portfolio registry. Lists every managed project. Skills iterate this to aggregate across projects.")
         Container(onboarding, "onboarding.yaml", "YAML", "Per-fork configuration — company, team, tech stack, quality bar.")
@@ -60,8 +60,8 @@ The diagram captures which "container" does what *when interpreted by the right 
 ## What this diagram does NOT show
 
 - Specific hook-to-rule mapping (which hook enforces which rule) — see `docs/rule-audit.md` for that.
-- The full list of 31 skills — see CLAUDE.md § "Available skills".
-- The full list of 19 roles — see `.claude/rules/role-triggers.md`.
+- The full list of 66 skills — see CLAUDE.md § "Available skills".
+- The full list of 20 roles — see `.claude/rules/role-triggers.md`.
 - The user's local `workspace/<name>/` clones of managed projects — they're gitignored and sit outside the ApexYard boundary (they belong to the managed project, not to ApexYard).
 
 ## Related diagrams
