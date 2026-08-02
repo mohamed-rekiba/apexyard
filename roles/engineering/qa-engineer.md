@@ -195,6 +195,8 @@ In Progress --> In Review --> QA --> Done
 
 A merged PR references its ticket with `Refs #N` (not `Closes #N`) and the ticket gets the `qa` label, so it lands in QA — not auto-closed to Done. Gate 6 (`.claude/rules/workflow-gates.md`) requires your sign-off before Done; if you find a defect, file it with `/bug` linked to the original ticket, which stays in QA until the fix is re-verified.
 
+On a fork that sets `ticket.qa_label` to `""`, this gate is disabled: merges close tickets directly and nothing reaches you. See `.claude/rules/workflow-gates.md` § "Opting out".
+
 ### QA Sign-off Format
 
 ```markdown

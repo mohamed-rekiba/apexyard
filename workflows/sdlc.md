@@ -272,6 +272,8 @@ See `.claude/rules/workflow-gates.md` § "Migration Gate (3a)" for the mechanica
 > **Primary role**: [QA Engineer](../roles/engineering/qa-engineer.md) · **Trigger**: merged PR → ticket moves to `qa` label (NOT auto-closed) · **Handoff from**: [Backend](../roles/engineering/backend-engineer.md) / [Frontend Engineer](../roles/engineering/frontend-engineer.md) (testable build on staging) · **Handoff to**: [Product Manager](../roles/product/product-manager.md) (AC sign-off) → Done
 >
 > This is the **mandatory gate** — merged code is never Done until the QA Engineer has verified every acceptance criterion. Auto-closing via `Closes #XX` is intentionally overridden with `Refs #XX` + the `qa` label when QA verification is required.
+>
+> **Adopters can opt out.** The gate assumes the author and the verifier are different people; on a solo fork they are not. Setting `ticket.qa_label` to `""` in `.claude/project-config.json` disables the transition, and PR bodies then use `Closes #XX` so the host closes the ticket on merge. The gate stays the shipped default — see [`.claude/rules/workflow-gates.md`](../.claude/rules/workflow-gates.md) § "Opting out" for what that trades away.
 
 ### Entry Criteria
 

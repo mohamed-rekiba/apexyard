@@ -287,6 +287,17 @@ What this step does is perform the transition the gate has always described but 
 ```bash
 if [ "${MERGE_RC:-1}" -eq 0 ]; then
 
+  # Resolve the ticket(s) this PR references FIRST, outside the label guard.
+  # Step 11 needs this list to decide whether to clear `current-ticket`, and it
+  # needs it whether or not the QA transition is enabled — an adopter who opted
+  # out still finished with the ticket. Bare `#N` only; a cross-repo
+  # `owner/repo#N` belongs to another tracker and is skipped.
+  TICKETS_FILE=$(mktemp)
+  gh pr view "<pr>" --repo "<owner/repo>" --json body,title \
+    -q '.title + "\n" + .body' 2>/dev/null \
+    | grep -oiE '\b(refs|closes|fixes|resolves)[[:space:]]+#[0-9]+' \
+    | grep -oE '[0-9]+' | sort -u > "$TICKETS_FILE"
+
   # Read the label RAW, not via config_get_or. config_get_or substitutes its
   # fallback for any empty value, which would make the documented `""` opt-out
   # unexpressible — an adopter who opted out would get labelled anyway.
@@ -299,19 +310,16 @@ if [ "${MERGE_RC:-1}" -eq 0 ]; then
   fi
 
   if [ -n "$QA_LABEL" ]; then
-    # Resolve the ticket(s) this PR references. Bare `#N` only — a cross-repo
-    # `owner/repo#N` belongs to another tracker and is skipped.
-    TICKETS_FILE=$(mktemp)
-    gh pr view "<pr>" --repo "<owner/repo>" --json body,title \
-      -q '.title + "\n" + .body' 2>/dev/null \
-      | grep -oiE '\b(refs|closes|fixes|resolves)[[:space:]]+#[0-9]+' \
-      | grep -oE '[0-9]+' | sort -u > "$TICKETS_FILE"
-
     # Print what was resolved; you issue the label calls in the next block.
     echo "QA_LABEL=$QA_LABEL"; echo "TICKETS:"; cat "$TICKETS_FILE"
+  else
+    echo "QA transition disabled (ticket.qa_label is empty) — no label applied."
+    echo "Tickets referenced: $(tr '\n' ' ' < "$TICKETS_FILE")"
   fi
 fi
 ```
+
+**When the transition is disabled**, skip the label calls below entirely and move to step 9. An adopter who set `qa_label` to `""` has opted out of Gate 6 — see `workflow-gates.md` § "Opting out". Their PR bodies use `Closes #N` rather than `Refs #N`, so the host closes the ticket on merge natively and there is nothing for this step to do.
 
 Then, **for each ticket printed above, issue ONE call as a bare top-level statement with LITERAL values** — the repo, the ticket number, and the resolved label all written out, not passed as shell variables:
 
