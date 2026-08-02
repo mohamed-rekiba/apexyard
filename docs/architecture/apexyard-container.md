@@ -28,7 +28,7 @@ C4Container
 
     Rel(ops, claudemd, "Reads / edits", "via Claude Code or editor")
     Rel(claude, claudemd, "Loads on session start")
-    Rel(claudemd, rules, "Imports via @.claude/rules/*.md")
+    Rel(claude, rules, "Loads every file on session start")
     Rel(claude, hooks, "Executes on tool events", "bash")
     Rel(claude, skills, "Invokes on /slash-command", "Skill tool")
     Rel(claude, agents, "Spawns sub-agents", "Agent tool")
@@ -52,7 +52,7 @@ The diagram captures which "container" does what *when interpreted by the right 
 
 ## Key relationships
 
-- **CLAUDE.md → rules** is the single most important arrow. Every rule file is imported via `@.claude/rules/*.md` from `CLAUDE.md`, and Claude Code applies them. Without that import chain, rules are orphaned prose.
+- **Claude Code → rules** is the single most important arrow, and it does **not** run through `CLAUDE.md`. Claude Code loads every `.claude/rules/*.md` file into the session directly; a rule is live because the file exists, not because anything imports it. Verified by disabling an import and confirming in a fresh session that the rule still loaded. `CLAUDE.md`'s job for rules is to say *when* each one applies, not to make it available.
 - **hooks → github** — hooks call `gh` directly (e.g. `block-merge-on-red-ci.sh` runs `gh pr checks`). This is how ApexYard's mechanical enforcement reaches the remote tracker state.
 - **skills → github** — skills are the user-facing portfolio-aware commands. Most call `gh` at some point; some also read the registry to iterate.
 - **skills → registry / projectdocs** — the portfolio-level read/write flow. `/inbox` / `/status` / `/projects` / `/stakeholder-update` all live here.

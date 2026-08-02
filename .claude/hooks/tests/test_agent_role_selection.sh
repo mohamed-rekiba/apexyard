@@ -42,10 +42,22 @@ else
 fi
 
 # 2. CLAUDE.md imports the rule
-if grep -q '@.claude/rules/agent-role-selection.md' "$CLAUDE_MD" 2>/dev/null; then
-  pass "CLAUDE.md imports agent-role-selection.md"
+# The trigger index is the section between "### Quality Rules" and the next
+# "###" heading. Scoped deliberately: an unscoped grep also matches CLAUDE.md's
+# TEMPLATES table, so it would pass even after the trigger is deleted.
+trigger_index() {
+  awk '/^### Quality Rules$/{f=1;next} f&&/^### /{exit} f' "$CLAUDE_MD"
+}
+
+# Asserts the trigger index names the rule, not that CLAUDE.md `@`-imports it.
+# Claude Code loads every .claude/rules/*.md file regardless — verified by
+# disabling an import and confirming in a fresh session that the rule was still
+# loaded — so an `@` line proved availability that was never in question. A
+# trigger saying WHEN the rule applies is what can actually go missing.
+if trigger_index | grep -q 'agent-role-selection'; then
+  pass "CLAUDE.md's trigger index names agent-role-selection"
 else
-  die "CLAUDE.md does not import @.claude/rules/agent-role-selection.md"
+  die "agent-role-selection is missing from CLAUDE.md's trigger index — nothing says when it applies"
 fi
 
 # 3. CLAUDE.md rules-count line is present and at least 15 (>= the count as
