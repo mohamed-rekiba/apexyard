@@ -71,6 +71,11 @@ AUDIT_EXPECTED=(
   "templates/audits/monitoring-audit.md"
   "templates/audits/performance-audit.md"
   "templates/audits/seo-audit.md"
+  # /docs-audit step 1 links to both of these by relative path. Without them
+  # the extracted pack ships a dangling reference — which is exactly how this
+  # gap was found, so it gets a regression guard rather than trust.
+  ".claude/rules/readme-quality.md"
+  "templates/project-readme.md"
   "EXTRACTION_MANIFEST.json"
 )
 for f in "${AUDIT_EXPECTED[@]}"; do

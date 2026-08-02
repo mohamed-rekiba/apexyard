@@ -4,6 +4,8 @@
 
 ApexYard ships markdown templates under `templates/` that consuming skills read at invocation time — `/decide` reads `agdr.md`, `/write-spec` reads `prd.md`, `/c4` reads `architecture/c4-context.md` and `architecture/c4-container.md` (and `architecture/c4-structurizr.dsl` when invoked with `--dsl`), `/migration` reads `agdr-migration.md` (for the AgDR) AND `tickets/migration.md` (for the ticket body), `/spike` reads `tickets/spike.md`, `/investigation` reads `tickets/investigation.md`, `/feature` / `/bug` / `/task` / `/idea` read their matching files under `tickets/`, `/handover` reads `architecture/c4-container.md`. The full inventory is in [`CLAUDE.md` § "Templates"](../CLAUDE.md).
 
+One template has no single consuming skill: **`project-readme.md`** is the shape for a managed project's own `README.md`, authored against the standard in [`.claude/rules/readme-quality.md`](../.claude/rules/readme-quality.md). It is referenced by `/handover` (as the shape for its "write the README" follow-up task) and audited by `/docs-audit` step 1. Note the filename — it is deliberately **not** `readme.md`, which on a case-insensitive filesystem (macOS, Windows) would collide with this file.
+
 ## `tickets/` subdir — uniform ticket body templates (since #281)
 
 Every ticket-creating skill (`/feature`, `/bug`, `/task`, `/migration`, `/idea`, `/spike`, `/investigation`) reads its issue-body shape from `templates/tickets/<name>.md`. Adopters override any of them by dropping a file at `<private_repo>/custom-templates/tickets/<name>.md` — same path-mirroring contract as every other template (AgDR-0023, refactored to apply uniformly to all 7 ticket types in AgDR-0031).
@@ -19,6 +21,7 @@ Every framework template can be overridden by an adopter-authored version. The o
 | Framework default | Adopter override location |
 |--------------------|---------------------------|
 | `templates/prd.md` | `<private_repo>/custom-templates/prd.md` |
+| `templates/project-readme.md` | `<private_repo>/custom-templates/project-readme.md` |
 | `templates/agdr.md` | `<private_repo>/custom-templates/agdr.md` |
 | `templates/agdr-migration.md` | `<private_repo>/custom-templates/agdr-migration.md` |
 | `templates/tickets/feature.md` | `<private_repo>/custom-templates/tickets/feature.md` |
