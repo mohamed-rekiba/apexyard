@@ -74,7 +74,7 @@ It isn't a regression, and reporting it as one wastes the operator's attention. 
 
 ### Step 2: Every other document
 
-Step 1 covers the front door. This step covers everything behind it — guides, runbooks, rule files, skill docs, reference pages — against [`.claude/rules/docs-quality.md`](../../rules/docs-quality.md), the framework's documentation authoring standard.
+Step 1 covers the front door. This step covers everything behind it — guides, runbooks, rule files, skill docs, reference pages — against [`.claude/rules/docs-quality.md`](../../rules/docs-quality.md), the framework's documentation authoring standard, and the shape it authors against, `templates/documentation.md`.
 
 Sample rather than exhaust: read the documents a new adopter would actually open (whatever `README.md` and `docs/` index link to first), plus any document changed in the audited range. Judge each on:
 

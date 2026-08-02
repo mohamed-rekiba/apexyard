@@ -45,6 +45,8 @@ Closes #123
 
 The format above is checked mechanically. What goes *inside* it is not, and it is the part that matters — a commit message is read almost exclusively by someone debugging, months later, who has found this commit with `git blame` or `git bisect` and needs to know what its author was thinking.
 
+Shape to author against: `templates/commit-message.md`, which carries a worked example and the anti-pattern list. Adopters override it at `<private_repo>/custom-templates/commit-message.md` (see [`templates/README.md`](../../templates/README.md)).
+
 **The subject says what changed. The body says why. The diff already says how.**
 
 ### Subject line

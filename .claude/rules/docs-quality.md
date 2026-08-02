@@ -4,6 +4,8 @@ Documentation is read by someone who does not yet know how the system works, and
 
 This rule is the documentation-wide sibling of [`readme-quality.md`](readme-quality.md), which governs the front door specifically. Everything below applies to guides, rules, runbooks, skill files, reference pages, and explanations — every document except the README, the AgDR, and the four surfaces in the table below that have rules of their own.
 
+Shape to author against: `templates/documentation.md`. Adopters override it at `<private_repo>/custom-templates/documentation.md` (see [`templates/README.md`](../../templates/README.md) for the path-mirroring convention).
+
 ## Which voice belongs where
 
 Every surface an agent writes prose to has a different reader and a different tense. This is the canonical table; the other writing rules link here rather than restating it, because a table copied into six files is a table that disagrees with itself within a quarter.

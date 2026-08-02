@@ -150,6 +150,9 @@ Template: @templates/agdr.md
 |----------|-------------|------|
 | PRD | Defining a new feature or product | `templates/prd.md` |
 | Project README | Writing or rewriting a project's README — the four-question shape (what is this · does it work · can I run it · how was it built). Standard: [`.claude/rules/readme-quality.md`](.claude/rules/readme-quality.md) | `templates/project-readme.md` |
+| Documentation | Writing a guide, runbook, reference page, or explanation — pick one Diataxis mode and stay in it. Standard: [`.claude/rules/docs-quality.md`](.claude/rules/docs-quality.md) | `templates/documentation.md` |
+| Code comments | Deciding whether a comment earns its place, and what it has to say — a pattern catalogue, not a form. Standard: [`.claude/rules/comment-quality.md`](.claude/rules/comment-quality.md) | `templates/code-comments.md` |
+| Commit message | Writing a commit body that explains why — the one surface where narrating the past is correct. Standard: [`.claude/rules/git-conventions.md`](.claude/rules/git-conventions.md) § "Commit Message Content" | `templates/commit-message.md` |
 | Technical Design | Planning implementation | `templates/technical-design.md` |
 | ADR | Recording architecture decisions | `templates/adr.md` |
 | AgDR | Recording AI agent decisions | `templates/agdr.md` |

@@ -4,6 +4,8 @@ A comment is the only part of a codebase nothing checks. Tests catch wrong code,
 
 This rule expands the one-line standard in [`code-standards.md`](code-standards.md) — *comments explain why, not what*. The voice for a comment is present tense, describing the code as it stands; the full surface-by-surface breakdown is in [`docs-quality.md`](docs-quality.md) § "Which voice belongs where".
 
+Patterns to author against: `templates/code-comments.md` — deliberately a pattern catalogue rather than a form, because comments have no document shape to fill in. Adopters override it at `<private_repo>/custom-templates/code-comments.md` (see [`templates/README.md`](../../templates/README.md)).
+
 ## The rule
 
 **Comment what the code cannot say: the why, the constraint, and the trap. Never restate the what.**

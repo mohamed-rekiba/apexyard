@@ -31,6 +31,8 @@ CODE_RULE="$RULES_DIR/code-standards.md"
 REPORT_RULE="$RULES_DIR/reporting-style.md"
 CLAUDE_MD="$SRC_ROOT/CLAUDE.md"
 DOCS_AUDIT="$SRC_ROOT/.claude/skills/docs-audit/SKILL.md"
+TEMPLATES_DIR="$SRC_ROOT/templates"
+TEMPLATES_README="$TEMPLATES_DIR/README.md"
 
 fail=0
 pass() { echo "PASS: $1"; }
@@ -159,6 +161,62 @@ else
   claimed=$(grep -o '| [0-9]\+ modular rule files' "$CLAUDE_MD" | grep -o '[0-9]\+' | head -1)
   die "CLAUDE.md claims ${claimed:-?} modular rule files; the directory has $actual"
 fi
+
+# --- 7. Every writing rule ships a template to author against ------------
+# This is the half that makes the family match what the README standard
+# already did (#1 shipped readme-quality.md AND templates/project-readme.md).
+# A rule with no template states a standard and leaves the author to invent
+# the shape, which is how two documents written to the same rule end up
+# looking nothing alike.
+check_pair() {
+  local rule="$1" template="$2" label="$3"
+  if [ -f "$TEMPLATES_DIR/$template" ]; then
+    pass "$label template exists ($template)"
+  else
+    die "$label has no template at templates/$template"
+    return
+  fi
+  # The rule must POINT at its template, or an author following the rule
+  # never learns the template exists.
+  if grep -q "templates/$template" "$rule"; then
+    pass "$label rule points at its template"
+  else
+    die "$(basename "$rule") does not reference templates/$template"
+  fi
+  # Registered for adopter override — path-mirroring convention.
+  if grep -q "custom-templates/$template" "$TEMPLATES_README"; then
+    pass "$label template is registered for adopter override"
+  else
+    die "templates/README.md has no override row for $template"
+  fi
+  # Listed in CLAUDE.md's template inventory.
+  if grep -q "templates/$template" "$CLAUDE_MD"; then
+    pass "$label template is listed in CLAUDE.md"
+  else
+    die "CLAUDE.md does not list templates/$template"
+  fi
+}
+
+check_pair "$DOCS_RULE"    "documentation.md"   "docs-quality"
+check_pair "$COMMENT_RULE" "code-comments.md"   "comment-quality"
+check_pair "$GIT_RULE"     "commit-message.md"  "git-conventions"
+
+# The README pair predates this family (#1) — assert it stays wired, since
+# these tests are what stop the set drifting apart.
+if [ -f "$TEMPLATES_DIR/project-readme.md" ]; then
+  pass "readme-quality template still present (project-readme.md)"
+else
+  die "templates/project-readme.md is missing"
+fi
+
+# Templates must carry the provenance header every other template has.
+for t in documentation.md code-comments.md commit-message.md; do
+  if head -1 "$TEMPLATES_DIR/$t" 2>/dev/null | grep -q "Source: ApexYard"; then
+    pass "$t carries the ApexYard source header"
+  else
+    die "$t is missing the ApexYard source header on line 1"
+  fi
+done
 
 echo
 if [ "$fail" -eq 0 ]; then
