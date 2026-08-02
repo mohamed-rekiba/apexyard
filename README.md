@@ -66,7 +66,9 @@ bin/run-hook-tests.sh            # everything
 bin/run-hook-tests.sh <filter>   # just the ones you're changing
 ```
 
-They run on every PR, along with shellcheck, markdown lint, CodeQL, a dependency scan, and an OpenSSF Scorecard job.
+They run on every PR, along with shellcheck, markdown lint, CodeQL, and a PR-title check.
+
+Two things deliberately don't run per-PR, and it's worth being precise about them. Secret and SAST scanning (gitleaks + Semgrep) is **release-gated**, not per-commit. And there is **no dependency scanning at all** — the framework is bash and markdown with no `package.json`, `requirements.txt`, or `pyproject.toml`, so there's nothing to audit. That's a property of having no dependencies, not a gap someone forgot to fill.
 
 **The harness adapters are verified against real sessions, not by construction.** A daily credentialed [Conformance CI](docs/conformance-ci.md) job drives opencode, pi, and Codex and confirms an ungated action is actually refused by the real bash hook. That's the difference between "we wired it up" and "we watched it block something."
 
@@ -208,7 +210,7 @@ Worth knowing before you fork, so you find out here rather than three weeks in.
 
 **It governs process, not correctness.** The gates make sure a change was reviewed, recorded, and consciously approved. They can't tell you the code is right. Rex catches a lot, but it's a reviewer, not a proof.
 
-**The merge gate assumes two people.** Its whole design is that the author and the approver are different — one writes, another says ship it. On a solo fork you're both, and the gate becomes a speed bump you're deliberately choosing to keep. That's a legitimate way to use it, but be honest with yourself about what it's buying. The QA stop has the same shape and ships with an [opt-out](.claude/rules/workflow-gates.md) for exactly this reason.
+**The merge gate assumes two people, and doesn't enforce that assumption.** Its design is that the author and the approver are different — one writes, another says ship it. But nothing mechanically stops an agent from writing its own review marker: `warn-review-marker-write.sh` warns and exits 0, always. What actually holds the line is that `/approve-merge` can only be invoked by a human, and that the marker's SHA is checked against the forge's reported HEAD. So the gate is real, but it's a gate on *approval*, not on *independence*. On a solo fork you're both parties anyway, which makes it a speed bump you're deliberately choosing to keep — a legitimate way to use it, as long as you know that's what you're buying. The QA stop has the same shape and ships with an [opt-out](.claude/rules/workflow-gates.md) for exactly this reason.
 
 **Claude Code is the first-class path.** opencode, pi, and Codex run the same hooks through an adapter, each with a precondition (usually a headless trust flag). Cursor is partial. If your tool isn't on that list, you get the markdown and none of the enforcement.
 
