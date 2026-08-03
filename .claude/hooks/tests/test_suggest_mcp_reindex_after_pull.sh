@@ -50,6 +50,16 @@ assert_banner_contains "cwd-based — reindex is project-scoped" \
   '{"hook_event_name":"PostToolUse","tool_name":"Bash","cwd":"/Users/me/portfolio/workspace/example","tool_input":{"command":"git pull"},"tool_response":{"exit_code":0}}' \
   'project="example"'
 
+# Pin the CALL SIGNATURE, not just the tool name and the project argument. The
+# banner told operators to pass scope="project" for a long time; the tool has
+# only ever accepted project and force, so the argument was silently wrong
+# wherever a client is strict. `project="example"` above passes either way —
+# this matches the corrected form exactly, and a reintroduced scope= makes the
+# text `reindex(scope=…`, which no longer contains `reindex(project=`.
+assert_banner_contains "banner uses the real signature — no phantom scope= arg" \
+  '{"hook_event_name":"PostToolUse","tool_name":"Bash","cwd":"/Users/me/portfolio/workspace/example","tool_input":{"command":"git pull"},"tool_response":{"exit_code":0}}' \
+  'reindex(project='
+
 assert_banner_contains "cwd nested under tool_input" \
   '{"hook_event_name":"PostToolUse","tool_name":"Bash","tool_input":{"command":"git pull","cwd":"/Users/me/portfolio/workspace/curios-dog"},"tool_response":{"exit_code":0}}' \
   "workspace/curios-dog/ was updated via git"

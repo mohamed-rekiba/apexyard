@@ -58,7 +58,8 @@ Sub-decisions:
   the harness populating cwd in the payload; the path-arg fallbacks cover the cases where it
   doesn't.
 - **Scope to the changed project only** — the banner names
-  `reindex(scope="project", project="<name>")`, never a portfolio-wide reindex.
+  `reindex(scope="project", project="<name>")` — *superseded, see the correction
+  immediately below* — never a portfolio-wide reindex.
   *(Correction, me2resh/apexyard#17: the decision stands, but that call signature
   was never valid — the tool takes `project` and `force` only, and there is no
   `scope` parameter. The banner now emits `reindex(project="<name>")`. Recorded

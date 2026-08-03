@@ -46,6 +46,16 @@ assert_banner_contains "single-fork form — banner mentions reindex command" \
   '{"hook_event_name":"PostToolUse","tool_name":"Bash","tool_input":{"command":"git clone https://github.com/owner/example.git workspace/example"},"tool_response":{"exit_code":0}}' \
   "mcp__apexyard-search__reindex"
 
+# Pin the CALL SIGNATURE, not just the tool name. The banner told operators to
+# pass scope="project" for a long time; the tool has only ever accepted project
+# and force, so the argument was silently wrong wherever a client is strict.
+# Asserting the tool name alone cannot catch that — this matches the corrected
+# form exactly, and a reintroduced scope= makes the text `reindex(scope=…`,
+# which no longer contains `reindex(project=`.
+assert_banner_contains "banner uses the real signature — no phantom scope= arg" \
+  '{"hook_event_name":"PostToolUse","tool_name":"Bash","tool_input":{"command":"git clone https://github.com/owner/example.git workspace/example"},"tool_response":{"exit_code":0}}' \
+  'reindex(project='
+
 assert_banner_contains "quoted target" \
   '{"hook_event_name":"PostToolUse","tool_name":"Bash","tool_input":{"command":"git clone https://github.com/owner/foo.git \"workspace/foo\""},"tool_response":{"exit_code":0}}' \
   "Repo cloned into workspace/foo/"
