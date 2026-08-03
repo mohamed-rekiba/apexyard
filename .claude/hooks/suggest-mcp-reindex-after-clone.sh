@@ -6,7 +6,7 @@
 # ---------------
 # /handover SKILL.md step 1.5-clone clones the target repo immediately when a
 # URL is given (default behaviour since #417). Step 1.5-reindex tells the agent
-# to call mcp__apexyard-search__reindex(scope="project", project="<name>")
+# to call mcp__apexyard-search__reindex(project="<name>")
 # right after the clone so the deep-dive phases that follow (steps 2–6) can use
 # search_code / search_docs instead of falling back to grep + Read.
 #
@@ -76,7 +76,7 @@ fi
 
 cat >&2 <<MSG
 > Repo cloned into workspace/$PROJECT/. Next step (SKILL.md § 1.5-reindex):
-    mcp__apexyard-search__reindex(scope="project", project="$PROJECT")
+    mcp__apexyard-search__reindex(project="$PROJECT")
   Then use search_code / search_docs for the deep-dive (steps 2-6) instead of
   grep + Read. If the MCP server is unavailable, print one-line warning + set
   REINDEX_STATUS=unavailable and continue.

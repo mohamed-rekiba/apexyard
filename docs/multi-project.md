@@ -435,6 +435,23 @@ The same dual-anchor rule applies to the `.claude/settings.json` hook wrappers t
 
 You'll never need to manage session-state files by hand. If you ever see a "BLOCKED: PR has no recorded code-reviewer approval" error after the agent visibly approved, check that at least one of the ops-fork anchors is present at the fork root: `.apexyard-fork` (v2) OR both `onboarding.yaml` AND `apexyard.projects.yaml` (v1).
 
+#### Where the search MCP looks for projects
+
+If you run the `apexyard-search` MCP server, its root set comes from the **filesystem**, not from `apexyard.projects.yaml`. A single-fork `.mcp.json` says:
+
+```json
+"args": ["serve", "--root", ".", "--semantic", "--name", "apexyard-search", "--sub-projects", "workspace"]
+```
+
+`--sub-projects` names directories to expand into per-project roots, and each is resolved **relative to `--root`**. Under split mode that combination finds nothing, because the workspace is in the sibling portfolio repo rather than under the fork. Point it at the real location instead — the path may reach outside the root, which is what makes the split layout expressible without a config file:
+
+```json
+"args": ["serve", "--root", ".", "--semantic", "--name", "apexyard-search",
+         "--sub-projects", "../<fork>-portfolio/workspace"]
+```
+
+Two consequences worth knowing. A clone is searchable as soon as it exists on disk — registering it in the registry is a separate step that search does not wait for, and the server re-resolves its roots when asked for a project name it does not yet know, so adding one needs no restart. And because discovery is filesystem-only, a project that is registered but not cloned is invisible to search; that is the intended behaviour, not a failure.
+
 ### Upstream sync under split mode
 
 `/update` works the same. The upstream framework occasionally ships changes to `projects/README.md` (the framework's per-project docs convention). After the symlink, your fork's `projects/README.md` is replaced by the portfolio's own README. If a future upstream sync wants to update `projects/README.md`, you'll see a conflict; resolve by either accepting the upstream version (re-tracks the file, replacing the symlink behaviour for that one path) or keeping your symlink. Most upstream releases don't touch this file.

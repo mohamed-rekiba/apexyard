@@ -59,6 +59,11 @@ Sub-decisions:
   doesn't.
 - **Scope to the changed project only** — the banner names
   `reindex(scope="project", project="<name>")`, never a portfolio-wide reindex.
+  *(Correction, me2resh/apexyard#17: the decision stands, but that call signature
+  was never valid — the tool takes `project` and `force` only, and there is no
+  `scope` parameter. The banner now emits `reindex(project="<name>")`. Recorded
+  here rather than edited above, because an AgDR is a record of a moment; the
+  syntax was wrong when written, so a reader copying it would have been misled.)*
 - **Skip on failed command** (`tool_response.exit_code != 0`) — no point reindexing after a
   pull that errored.
 
