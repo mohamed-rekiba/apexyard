@@ -308,6 +308,68 @@ echo "WRONG: gh should not be called for a glab-registered project" >&2
 exit 1
 EOF
   chmod +x "$sb/bin/gh"
+  # A minimal `yq` so the registry lookup works on any machine.
+  #
+  # `_tracker_project_value` reads the registry with `yq`, falling back to
+  # python3+PyYAML, and returns 1 if neither is available. On a host with
+  # neither, `tracker_kind "g/p"` silently degrades to the GLOBAL default —
+  # `"kind": "gh"` above — so the hook consults gh, the deliberately-loud gh
+  # mock fires, and these two cases fail for a reason that has nothing to do
+  # with what they test. macOS ships neither; Ubuntu's python3 has PyYAML,
+  # which is the only reason CI stayed green.
+  #
+  # The stub READS THE REGISTRY it is handed rather than answering from the
+  # expression text. That distinction matters: an earlier version matched the
+  # literals `strenv(REPO)` and `.tracker.kind`, so rewording the lib's query to
+  # the equivalent `env(REPO)` / `.tracker[strenv(KEYNAME)]` broke both cases —
+  # and broke them on macOS ONLY, because Ubuntu's PyYAML would rescue CI. That
+  # is precisely the fails-on-a-laptop / passes-in-CI signature this file was
+  # repaired to remove, re-armed for whoever next edits `_lib-tracker.sh`.
+  #
+  # Parsing the registry instead couples the stub to the fixture's own YAML,
+  # which this test writes and controls. It still cannot answer blindly: the
+  # repo must match, the key must exist, and the registry path must be real —
+  # so a hook that asked about the wrong repo, requested a different key, or
+  # stopped consulting the registry still fails.
+  cat > "$sb/bin/yq" <<'EOF'
+#!/bin/bash
+# Called as: REPO=<repo> yq eval "<expr>" <registry>
+# Answers `.tracker.<key>` for the project whose `repo:` equals $REPO.
+registry=""; expr=""
+for a in "$@"; do
+  [ -f "$a" ] && registry="$a"
+  case "$a" in *tracker*) expr="$a" ;; esac
+done
+[ -n "$registry" ] && [ -n "$expr" ] && [ -n "${REPO:-}" ] || exit 0
+# The key is whatever follows `.tracker.` or `.tracker["`, however written.
+key=$(printf '%s' "$expr" | sed -n 's/.*\.tracker[.["]*\([a-z_]*\).*/\1/p')
+[ -n "$key" ] || exit 0
+awk -v want="$REPO" -v key="$key" '
+  function unq(s) { gsub(/^[ \t]+|[ \t]+$/, "", s); gsub(/^["\x27]|["\x27]$/, "", s); return s }
+  # Everything after the first colon, so multi-word values survive
+  # (view_command: gh issue view would otherwise truncate to "gh").
+  function val(l) { sub(/^[^:]*:[ \t]*/, "", l); return unq(l) }
+  # ANY list item ends the previous entry, not just "- name:". A registry
+  # written "- repo: o/q" (key order is not guaranteed) would otherwise leave
+  # the prior entry matched and answer with the wrong project tracker.
+  /^[[:space:]]*-/ { inproj = 0; intracker = 0 }
+  # Strip a leading "- " so the same rules match whether a key is the first in
+  # its list item or not. Note awk sub() has no capture-group backreferences —
+  # a "\\1" replacement inserts those characters literally rather than the
+  # captured indent, which silently broke this on the first attempt.
+  { line = $0; sub(/^[[:space:]]*-[[:space:]]*/, "", line) }
+  line ~ /^[[:space:]]*repo:[ \t]/     { inproj = (val(line) == want) }
+  line ~ /^[[:space:]]*tracker:[ \t]*$/ { intracker = inproj }
+  # Scoped to after tracker:, so a project-level sibling of the same name
+  # PRECEDING the tracker block cannot shadow the real value. Deliberately not
+  # stronger than that: intracker never resets on dedent, so a sibling placed
+  # AFTER the block would still be read when the key is absent from tracker
+  # itself. Unreachable against the fixture this function writes, and closing it
+  # needs indentation tracking this stub has no reason to carry.
+  inproj && intracker && line ~ ("^[[:space:]]*" key ":") { print val(line); exit }
+' "$registry"
+EOF
+  chmod +x "$sb/bin/yq"
   echo "$sb"
 }
 
