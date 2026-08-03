@@ -345,10 +345,24 @@ done
 key=$(printf '%s' "$expr" | sed -n 's/.*\.tracker[.["]*\([a-z_]*\).*/\1/p')
 [ -n "$key" ] || exit 0
 awk -v want="$REPO" -v key="$key" '
-  function unq(s) { gsub(/^["\x27]|["\x27]$/, "", s); return s }
-  /^[[:space:]]*-[[:space:]]*name:/ { inproj = 0 }
-  /^[[:space:]]*repo:/  { inproj = (unq($2) == want) }
-  inproj && $1 == key":" { print unq($2); exit }
+  function unq(s) { gsub(/^[ \t]+|[ \t]+$/, "", s); gsub(/^["\x27]|["\x27]$/, "", s); return s }
+  # Everything after the first colon, so multi-word values survive
+  # (view_command: gh issue view would otherwise truncate to "gh").
+  function val(l) { sub(/^[^:]*:[ \t]*/, "", l); return unq(l) }
+  # ANY list item ends the previous entry, not just "- name:". A registry
+  # written "- repo: o/q" (key order is not guaranteed) would otherwise leave
+  # the prior entry matched and answer with the wrong project tracker.
+  /^[[:space:]]*-/ { inproj = 0; intracker = 0 }
+  # Strip a leading "- " so the same rules match whether a key is the first in
+  # its list item or not. Note awk sub() has no capture-group backreferences —
+  # a "\\1" replacement inserts those characters literally rather than the
+  # captured indent, which silently broke this on the first attempt.
+  { line = $0; sub(/^[[:space:]]*-[[:space:]]*/, "", line) }
+  line ~ /^[[:space:]]*repo:[ \t]/     { inproj = (val(line) == want) }
+  line ~ /^[[:space:]]*tracker:[ \t]*$/ { intracker = inproj }
+  # Scoped INSIDE tracker:, so a top-level sibling of the same name (a
+  # project-level "kind:") cannot shadow the real value.
+  inproj && intracker && line ~ ("^[[:space:]]*" key ":") { print val(line); exit }
 ' "$registry"
 EOF
   chmod +x "$sb/bin/yq"
