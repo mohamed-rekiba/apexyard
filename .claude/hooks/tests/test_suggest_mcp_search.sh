@@ -57,6 +57,19 @@ make_root() {
   local dir="$1" mcp="$2"
   copy_hook_into "$dir"
   printf '%s' "$mcp" > "$dir/.mcp.json"
+  # Anchor the sandbox as an ops fork and pin gate_mode explicitly.
+  #
+  # Copying the hook fixes WHICH .mcp.json is read, but config is resolved
+  # separately: `resolve_ops_root "$PWD"` walks up from the working directory,
+  # which without an anchor here (and without the cd in run_hook) lands on the
+  # real checkout — so `mcp_search.gate_mode` came from THIS repo's config.
+  # That is a leak of exactly the class this file was repaired for: setting
+  # gate_mode true, a documented opt-in rather than a contrived value, flipped
+  # six cases from pass to fail. These fixtures assert advisory behaviour, so
+  # gate_mode must be false and must be false *because the fixture says so*.
+  touch "$dir/.apexyard-fork"
+  printf '%s' '{"mcp_search":{"gate_mode":false}}' > "$dir/.claude/project-config.defaults.json"
+  printf '%s' '{"mcp_search":{"gate_mode":false}}' > "$dir/.claude/project-config.json"
 }
 
 MCP_DIR=$(mktemp -d)
@@ -69,9 +82,12 @@ cleanup() { rm -rf "$MCP_DIR" "$NO_MCP_DIR"; }
 trap cleanup EXIT
 
 # run_hook <input-json> <portfolio_root>  → prints the hook's stdout.
-# Runs the sandbox's own copy so the install-gate resolves inside the sandbox.
+# Runs the sandbox's own copy so the install-gate resolves inside the sandbox,
+# from inside the sandbox so config resolution does too, with the session pin
+# disabled so a live session's pin cannot redirect either.
 run_hook() {
-  echo "$1" | APEXYARD_PORTFOLIO_ROOT="$2" bash "$2/.claude/hooks/suggest-mcp-search.sh"
+  ( cd "$2" && echo "$1" | env APEXYARD_OPS_DISABLE_PIN=1 APEXYARD_PORTFOLIO_ROOT="$2" \
+      bash "$2/.claude/hooks/suggest-mcp-search.sh" )
 }
 
 # assert the hook emitted a well-formed additionalContext advisory on stdout

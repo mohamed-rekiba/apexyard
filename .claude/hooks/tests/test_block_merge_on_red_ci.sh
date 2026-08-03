@@ -318,22 +318,38 @@ EOF
   # with what they test. macOS ships neither; Ubuntu's python3 has PyYAML,
   # which is the only reason CI stayed green.
   #
-  # The stub VERIFIES THE QUERY rather than answering unconditionally: it
-  # matches on $REPO and the requested `.tracker.<key>` path, so a hook that
-  # asked about the wrong repo — or stopped consulting the registry at all —
-  # still fails. Answering `glab` blindly would make the case tautological.
+  # The stub READS THE REGISTRY it is handed rather than answering from the
+  # expression text. That distinction matters: an earlier version matched the
+  # literals `strenv(REPO)` and `.tracker.kind`, so rewording the lib's query to
+  # the equivalent `env(REPO)` / `.tracker[strenv(KEYNAME)]` broke both cases —
+  # and broke them on macOS ONLY, because Ubuntu's PyYAML would rescue CI. That
+  # is precisely the fails-on-a-laptop / passes-in-CI signature this file was
+  # repaired to remove, re-armed for whoever next edits `_lib-tracker.sh`.
+  #
+  # Parsing the registry instead couples the stub to the fixture's own YAML,
+  # which this test writes and controls. It still cannot answer blindly: the
+  # repo must match, the key must exist, and the registry path must be real —
+  # so a hook that asked about the wrong repo, requested a different key, or
+  # stopped consulting the registry still fails.
   cat > "$sb/bin/yq" <<'EOF'
 #!/bin/bash
-# usage as called: REPO=<repo> yq eval "<expr>" <registry>
-expr=""
-for a in "$@"; do case "$a" in *"select(.repo"*) expr="$a" ;; esac; done
-[ -n "$expr" ] || exit 0
-case "$expr" in *"strenv(REPO)"*) ;; *) exit 0 ;; esac
-[ "${REPO:-}" = "g/p" ] || exit 0
-case "$expr" in
-  *".tracker.kind"*) echo "glab" ;;
-  *) echo "" ;;
-esac
+# Called as: REPO=<repo> yq eval "<expr>" <registry>
+# Answers `.tracker.<key>` for the project whose `repo:` equals $REPO.
+registry=""; expr=""
+for a in "$@"; do
+  [ -f "$a" ] && registry="$a"
+  case "$a" in *tracker*) expr="$a" ;; esac
+done
+[ -n "$registry" ] && [ -n "$expr" ] && [ -n "${REPO:-}" ] || exit 0
+# The key is whatever follows `.tracker.` or `.tracker["`, however written.
+key=$(printf '%s' "$expr" | sed -n 's/.*\.tracker[.["]*\([a-z_]*\).*/\1/p')
+[ -n "$key" ] || exit 0
+awk -v want="$REPO" -v key="$key" '
+  function unq(s) { gsub(/^["\x27]|["\x27]$/, "", s); return s }
+  /^[[:space:]]*-[[:space:]]*name:/ { inproj = 0 }
+  /^[[:space:]]*repo:/  { inproj = (unq($2) == want) }
+  inproj && $1 == key":" { print unq($2); exit }
+' "$registry"
 EOF
   chmod +x "$sb/bin/yq"
   echo "$sb"
