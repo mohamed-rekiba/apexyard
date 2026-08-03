@@ -360,8 +360,12 @@ awk -v want="$REPO" -v key="$key" '
   { line = $0; sub(/^[[:space:]]*-[[:space:]]*/, "", line) }
   line ~ /^[[:space:]]*repo:[ \t]/     { inproj = (val(line) == want) }
   line ~ /^[[:space:]]*tracker:[ \t]*$/ { intracker = inproj }
-  # Scoped INSIDE tracker:, so a top-level sibling of the same name (a
-  # project-level "kind:") cannot shadow the real value.
+  # Scoped to after tracker:, so a project-level sibling of the same name
+  # PRECEDING the tracker block cannot shadow the real value. Deliberately not
+  # stronger than that: intracker never resets on dedent, so a sibling placed
+  # AFTER the block would still be read when the key is absent from tracker
+  # itself. Unreachable against the fixture this function writes, and closing it
+  # needs indentation tracking this stub has no reason to carry.
   inproj && intracker && line ~ ("^[[:space:]]*" key ":") { print val(line); exit }
 ' "$registry"
 EOF
