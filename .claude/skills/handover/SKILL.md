@@ -172,8 +172,12 @@ All subsequent reads in steps 2–6 use `$WORKSPACE_DIR/<name>/` as the repo roo
 After a successful clone (`$CLONE_STATUS=cloned`), trigger an MCP reindex so `search_code` and `search_docs` return results during the deep-dive phases that follow (steps 2–6). Without this step those queries return empty against the just-cloned repo, and the agent silently falls back to `find` + `cat` + `Bash` — defeating the token-cost benefit of cloning early.
 
 ```
-mcp__apexyard-search__reindex(scope="project", project="<name>")
+mcp__apexyard-search__reindex(project="<name>")
 ```
+
+The tool takes `project` and `force` only — there is no `scope` parameter, and passing one is at best ignored and at worst an error depending on how strict the client is.
+
+The clone does **not** need to be registered in `apexyard.projects.yaml` first. `forge-search` discovers roots from the filesystem (`--sub-projects`), and the server re-resolves its root set when asked for a project name it does not yet know — so a repo cloned in step 1.5-clone is indexable immediately, and this step does not depend on the registry append that happens later in step 7.
 
 **On MCP unavailable:** the call will error. Catch the error, print a single-line warning, set the marker, and continue. **Do not skip silently** — silent skips are indistinguishable between "server down" and "agent forgot the step", and the second failure mode is what this step exists to prevent.
 

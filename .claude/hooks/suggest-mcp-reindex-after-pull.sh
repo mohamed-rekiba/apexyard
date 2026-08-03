@@ -158,7 +158,7 @@ fi
 cat >&2 <<MSG
 > workspace/$PROJECT/ was updated via git (HEAD moved). Its search index may
   now be stale. Reindex THAT project so search_code / search_docs stay fresh:
-    mcp__apexyard-search__reindex(scope="project", project="$PROJECT")
+    mcp__apexyard-search__reindex(project="$PROJECT")
   Scoped to the changed project only — do not reindex the whole portfolio.
   If the MCP search server is unavailable, print a one-line warning and
   continue (best-effort signal).
